@@ -30,7 +30,7 @@ class Market(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     source: Mapped[str] = mapped_column(String, default="polymarket", index=True)
-    event_id: Mapped[str] = mapped_column(String, ForeignKey("events.id"))
+    event_id: Mapped[str] = mapped_column(String, ForeignKey("events.id"), index=True)
     question: Mapped[str | None] = mapped_column(String)
     end_date: Mapped[datetime | None] = mapped_column(DateTime)
     condition_id: Mapped[str | None] = mapped_column(String)
@@ -63,7 +63,7 @@ class Opportunity(Base):
     __tablename__ = "opportunities"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    opp_key: Mapped[str] = mapped_column(String, index=True)
+    opp_key: Mapped[str] = mapped_column(String, unique=True, index=True)
     type: Mapped[str] = mapped_column(String, index=True)
     event_id: Mapped[str] = mapped_column(String, ForeignKey("events.id"))
     edge_pct: Mapped[float] = mapped_column(Float)

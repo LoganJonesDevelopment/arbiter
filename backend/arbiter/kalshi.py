@@ -122,8 +122,8 @@ class KalshiCollector:
         no_ask = _dollars_to_float(data.get("no_ask_dollars", "0"))
         last_price = _dollars_to_float(data.get("last_price_dollars", "0"))
 
-        yes_price = (yes_bid + yes_ask) / 2 if (yes_bid and yes_ask) else last_price
-        no_price = (no_bid + no_ask) / 2 if (no_bid and no_ask) else (1.0 - yes_price)
+        yes_price = (yes_bid + yes_ask) / 2 if (yes_bid > 0 and yes_ask > 0) else last_price
+        no_price = (no_bid + no_ask) / 2 if (no_bid > 0 and no_ask > 0) else (1.0 - yes_price)
 
         outcome_prices = [round(yes_price, 4), round(no_price, 4)]
         outcomes = [

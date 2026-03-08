@@ -5,6 +5,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from arbiter.config import settings
+from arbiter.fees import polymarket_fee
 from arbiter.models import Event, Market, Opportunity, Snapshot
 
 logger = logging.getLogger(__name__)
@@ -95,7 +96,7 @@ async def analyze_multi_outcome(session: AsyncSession) -> list[dict]:
             continue
 
         is_complete = inactive_count == 0
-        total_fees = settings.fee_rate * num_legs
+        total_fees = polymarket_fee(min(yes_prices))
         cost_with_fees = price_sum + total_fees
 
         if price_sum >= 1.0:
@@ -272,10 +273,11 @@ async def analyze_tailing(session: AsyncSession) -> list[dict]:
         event = events_by_id.get(market.event_id)
         likely_outcome = "Yes" if yes_price > no_price else "No"
         edge = (1.0 - high_price) * 100
-        fee_adjusted_edge = edge - (settings.fee_rate * 100)
+        fee = polymarket_fee(high_price)
+        fee_adjusted_edge = edge - (fee * 100)
 
         cost_per_share = high_price
-        profit_per_share = 1.0 - cost_per_share - settings.fee_rate
+        profit_per_share = 1.0 - cost_per_share - fee
         if cost_per_share > 0:
             shares_at_100 = 100.0 / cost_per_share
             est_profit = shares_at_100 * profit_per_share

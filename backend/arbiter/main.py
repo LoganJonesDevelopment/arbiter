@@ -1,13 +1,16 @@
 import asyncio
 import logging
+from datetime import datetime, UTC, timedelta
 
 from contextlib import asynccontextmanager
+from sqlalchemy import delete
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from arbiter.config import settings
 from arbiter.db import init_db, async_session
+from arbiter.models import Snapshot
 from arbiter.polymarket import PolymarketCollector
 from arbiter.kalshi import KalshiCollector
 from arbiter import analyzers
@@ -24,6 +27,16 @@ scheduler = AsyncIOScheduler()
 scan_lock = asyncio.Lock()
 
 
+async def prune_snapshots(session):
+    cutoff = datetime.now(UTC) - timedelta(hours=48)
+    result = await session.execute(
+        delete(Snapshot).where(Snapshot.timestamp < cutoff)
+    )
+    await session.commit()
+    if result.rowcount:
+        logger.info(f"Pruned {result.rowcount} old snapshots")
+
+
 async def run_scan():
     async with async_session() as session:
         poly_collector = PolymarketCollector()
@@ -36,6 +49,8 @@ async def run_scan():
 
         matches = await match_events(session)
         cross_arbs = await find_cross_exchange_arbs(session)
+
+        await prune_snapshots(session)
 
         return {
             "polymarket": poly_result,

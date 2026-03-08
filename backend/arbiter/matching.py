@@ -5,6 +5,8 @@ from datetime import datetime, UTC
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from arbiter.config import settings
+from arbiter.fees import polymarket_fee, kalshi_fee
 from arbiter.models import Event, Market, EventMatch, Opportunity
 
 logger = logging.getLogger(__name__)
@@ -314,8 +316,6 @@ def _check_binary_arb(
     if kalshi_yes < MIN_PRICE_FOR_ARB and kalshi_no < MIN_PRICE_FOR_ARB:
         return None
 
-    poly_fee_rate = 0.02
-
     best_arb = None
     best_edge = 0.0
 
@@ -332,10 +332,11 @@ def _check_binary_arb(
 
         gross_profit = 1.0 - cost
 
+        poly_price = buy_yes_price if buy_yes_src == "polymarket" else buy_no_price
         kalshi_price = buy_yes_price if buy_yes_src == "kalshi" else buy_no_price
 
-        poly_fee_amt = poly_fee_rate
-        kalshi_fee_amt = 0.07 * kalshi_price * (1.0 - kalshi_price)
+        poly_fee_amt = polymarket_fee(poly_price)
+        kalshi_fee_amt = kalshi_fee(kalshi_price)
 
         net_profit = gross_profit - poly_fee_amt - kalshi_fee_amt
         edge_pct = (net_profit / cost) * 100 if cost > 0 else 0
