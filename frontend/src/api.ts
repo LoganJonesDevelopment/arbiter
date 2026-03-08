@@ -1,8 +1,15 @@
 const BASE = '/api';
 
-export async function fetchStats() {
-  const res = await fetch(`${BASE}/stats`);
+async function fetchJson(url: string, init?: RequestInit) {
+  const res = await fetch(url, init);
+  if (!res.ok) {
+    throw new Error(`${res.status} ${res.statusText}`);
+  }
   return res.json();
+}
+
+export async function fetchStats() {
+  return fetchJson(`${BASE}/stats`);
 }
 
 export async function fetchOpportunities(params?: {
@@ -16,21 +23,17 @@ export async function fetchOpportunities(params?: {
   if (params?.status) search.set('status', params.status);
   if (params?.sort_by) search.set('sort_by', params.sort_by);
   if (params?.limit) search.set('limit', String(params.limit));
-  const res = await fetch(`${BASE}/opportunities?${search}`);
-  return res.json();
+  return fetchJson(`${BASE}/opportunities?${search}`);
 }
 
 export async function fetchEventDetail(eventId: string) {
-  const res = await fetch(`${BASE}/events/${eventId}`);
-  return res.json();
+  return fetchJson(`${BASE}/events/${eventId}`);
 }
 
 export async function fetchMarketHistory(marketId: string, hours = 24) {
-  const res = await fetch(`${BASE}/markets/${marketId}/history?hours=${hours}`);
-  return res.json();
+  return fetchJson(`${BASE}/markets/${marketId}/history?hours=${hours}`);
 }
 
 export async function triggerScan() {
-  const res = await fetch(`${BASE}/scan`, { method: 'POST' });
-  return res.json();
+  return fetchJson(`${BASE}/scan`, { method: 'POST' });
 }

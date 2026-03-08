@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, UTC, timedelta
 
-from sqlalchemy import select, update, func, and_
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from arbiter.config import settings
@@ -215,6 +215,10 @@ async def analyze_tailing(session: AsyncSession) -> list[dict]:
 
     recent_cutoff = datetime.now(UTC) - timedelta(minutes=30)
 
+    event_ids = {m.event_id for m in markets}
+    event_result = await session.execute(select(Event).where(Event.id.in_(event_ids)))
+    events_by_id = {e.id: e for e in event_result.scalars().all()}
+
     opportunities = []
 
     for market in markets:
@@ -261,7 +265,7 @@ async def analyze_tailing(session: AsyncSession) -> list[dict]:
         if momentum == "stable" and high_price < 0.97:
             continue
 
-        event = await session.get(Event, market.event_id)
+        event = events_by_id.get(market.event_id)
         likely_outcome = "Yes" if yes_price > no_price else "No"
         edge = (1.0 - high_price) * 100
         fee_adjusted_edge = edge - (settings.fee_rate * 100)

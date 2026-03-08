@@ -1,6 +1,6 @@
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,8 +47,8 @@ async def get_opportunities(
     type: str | None = Query(None),
     status: str = Query("active"),
     sort_by: str = Query("quality"),
-    limit: int = Query(50),
-    offset: int = Query(0),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     session: AsyncSession = Depends(get_session),
 ):
     query = select(Opportunity).where(Opportunity.status == status)
@@ -96,8 +96,8 @@ async def get_opportunities(
 
 @router.get("/events")
 async def get_events(
-    limit: int = Query(50),
-    offset: int = Query(0),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     search: str | None = Query(None),
     session: AsyncSession = Depends(get_session),
 ):
@@ -128,7 +128,7 @@ async def get_events(
 async def get_event_detail(event_id: str, session: AsyncSession = Depends(get_session)):
     event = await session.get(Event, event_id)
     if not event:
-        return {"error": "not found"}
+        raise HTTPException(status_code=404, detail="Event not found")
 
     result = await session.execute(
         select(Market).where(Market.event_id == event_id).order_by(desc(Market.volume))
@@ -161,14 +161,17 @@ async def get_event_detail(event_id: str, session: AsyncSession = Depends(get_se
 @router.get("/markets/{market_id}/history")
 async def get_market_history(
     market_id: str,
-    hours: int = Query(24),
+    hours: int = Query(24, ge=1, le=720),
     session: AsyncSession = Depends(get_session),
 ):
-    cutoff = datetime.now(UTC).timestamp() - (hours * 3600)
+    cutoff = datetime.now(UTC) - timedelta(hours=hours)
 
     result = await session.execute(
         select(Snapshot)
-        .where(Snapshot.market_id == market_id)
+        .where(
+            Snapshot.market_id == market_id,
+            Snapshot.timestamp >= cutoff,
+        )
         .order_by(Snapshot.timestamp)
     )
     snapshots = result.scalars().all()

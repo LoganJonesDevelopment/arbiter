@@ -1,4 +1,4 @@
-from sqlalchemy import event, text
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from arbiter.config import settings
 from arbiter.models import Base
