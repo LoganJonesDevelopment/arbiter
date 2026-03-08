@@ -9,7 +9,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from arbiter.config import settings
 from arbiter.db import init_db, async_session
 from arbiter.polymarket import PolymarketCollector
+from arbiter.kalshi import KalshiCollector
 from arbiter import analyzers
+from arbiter.matching import match_events, find_cross_exchange_arbs
 from arbiter.routes import router
 
 logging.basicConfig(
@@ -24,10 +26,24 @@ scan_lock = asyncio.Lock()
 
 async def run_scan():
     async with async_session() as session:
-        collector = PolymarketCollector()
-        collect_result = await collector.collect(session)
+        poly_collector = PolymarketCollector()
+        kalshi_collector = KalshiCollector()
+
+        poly_result = await poly_collector.collect(session)
+        kalshi_result = await kalshi_collector.collect(session)
+
         analysis_result = await analyzers.run_all(session)
-        return {"collection": collect_result, "analysis": analysis_result}
+
+        matches = await match_events(session)
+        cross_arbs = await find_cross_exchange_arbs(session)
+
+        return {
+            "polymarket": poly_result,
+            "kalshi": kalshi_result,
+            "matches": len(matches),
+            "cross_exchange_arbs": len(cross_arbs),
+            "analysis": analysis_result,
+        }
 
 
 async def scheduled_scan():
@@ -48,14 +64,13 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database initialized")
 
-    # Run initial scan
     asyncio.create_task(scheduled_scan())
 
     scheduler.add_job(
         scheduled_scan,
         "interval",
         minutes=settings.collection_interval_minutes,
-        id="polymarket_scan",
+        id="scan",
     )
     scheduler.start()
     logger.info(f"Scheduler started (interval: {settings.collection_interval_minutes}m)")

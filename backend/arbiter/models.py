@@ -11,9 +11,11 @@ class Event(Base):
     __tablename__ = "events"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    source: Mapped[str] = mapped_column(String, default="polymarket", index=True)
     title: Mapped[str] = mapped_column(String, nullable=False)
     slug: Mapped[str | None] = mapped_column(String)
     category: Mapped[str | None] = mapped_column(String)
+    end_date: Mapped[datetime | None] = mapped_column(DateTime)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     neg_risk: Mapped[bool] = mapped_column(Boolean, default=False)
     markets_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -27,8 +29,10 @@ class Market(Base):
     __tablename__ = "markets"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    source: Mapped[str] = mapped_column(String, default="polymarket", index=True)
     event_id: Mapped[str] = mapped_column(String, ForeignKey("events.id"))
     question: Mapped[str | None] = mapped_column(String)
+    end_date: Mapped[datetime | None] = mapped_column(DateTime)
     condition_id: Mapped[str | None] = mapped_column(String)
     clob_token_ids: Mapped[list | None] = mapped_column(JSON)
     outcomes: Mapped[list | None] = mapped_column(JSON)
@@ -68,3 +72,15 @@ class Opportunity(Base):
     first_seen: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     last_seen: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     status: Mapped[str] = mapped_column(String, default="active", index=True)
+
+
+class EventMatch(Base):
+    __tablename__ = "event_matches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    poly_event_id: Mapped[str] = mapped_column(String, ForeignKey("events.id"), index=True)
+    kalshi_event_id: Mapped[str] = mapped_column(String, ForeignKey("events.id"), index=True)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    match_method: Mapped[str] = mapped_column(String)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))

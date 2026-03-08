@@ -3,13 +3,18 @@ import logging
 from datetime import datetime, UTC
 
 import httpx
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from arbiter.config import settings
 from arbiter.models import Event, Market, Snapshot
 
 logger = logging.getLogger(__name__)
+
+SOURCE = "polymarket"
+
+
+def _prefixed_id(raw_id: str) -> str:
+    return f"poly:{raw_id}"
 
 
 class PolymarketCollector:
@@ -60,8 +65,18 @@ class PolymarketCollector:
             return None
         return tags[0].get("label") if isinstance(tags[0], dict) else str(tags[0])
 
+    @staticmethod
+    def _parse_end_date(data: dict) -> datetime | None:
+        end = data.get("endDate") or data.get("end_date_iso")
+        if not end:
+            return None
+        try:
+            return datetime.fromisoformat(end.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            return None
+
     async def _upsert_event(self, session: AsyncSession, data: dict) -> int:
-        event_id = str(data["id"])
+        event_id = _prefixed_id(str(data["id"]))
         markets_data = data.get("markets", [])
         category = self._extract_category(data)
 
@@ -70,9 +85,11 @@ class PolymarketCollector:
         if not event:
             event = Event(
                 id=event_id,
+                source=SOURCE,
                 title=data.get("title", ""),
                 slug=data.get("slug"),
                 category=category,
+                end_date=self._parse_end_date(data),
                 active=data.get("active", True),
                 neg_risk=data.get("negRisk", False),
                 markets_count=len(markets_data),
@@ -82,6 +99,7 @@ class PolymarketCollector:
             event.title = data.get("title", event.title)
             event.slug = data.get("slug", event.slug)
             event.category = category or event.category
+            event.end_date = self._parse_end_date(data) or event.end_date
             event.active = data.get("active", event.active)
             event.neg_risk = data.get("negRisk", event.neg_risk)
             event.markets_count = len(markets_data)
@@ -93,7 +111,7 @@ class PolymarketCollector:
         return len(markets_data)
 
     async def _upsert_market(self, session: AsyncSession, event_id: str, data: dict):
-        market_id = str(data["id"])
+        market_id = _prefixed_id(str(data["id"]))
 
         outcomes = self._parse_json_field(data.get("outcomes", "[]"))
         outcome_prices = self._parse_json_field(data.get("outcomePrices", "[]"))
@@ -106,8 +124,10 @@ class PolymarketCollector:
         if not market:
             market = Market(
                 id=market_id,
+                source=SOURCE,
                 event_id=event_id,
                 question=data.get("question", ""),
+                end_date=self._parse_end_date(data),
                 condition_id=data.get("conditionId"),
                 clob_token_ids=clob_token_ids,
                 outcomes=outcomes,

@@ -1,0 +1,21 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8890:8888"
+    volumes:
+      - backend-data:/app/data
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./data/arbiter.db
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8889:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  backend-data:

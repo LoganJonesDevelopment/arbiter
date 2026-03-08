@@ -12,14 +12,18 @@ logger = logging.getLogger(__name__)
 
 async def run_all(session: AsyncSession) -> dict:
     await session.execute(
-        update(Opportunity).where(Opportunity.status == "active").values(status="stale")
+        update(Opportunity)
+        .where(Opportunity.status == "active", Opportunity.type.in_(["multi_outcome_arb", "tailing"]))
+        .values(status="stale")
     )
 
     multi = await analyze_multi_outcome(session)
     tailing = await analyze_tailing(session)
 
     await session.execute(
-        update(Opportunity).where(Opportunity.status == "stale").values(status="expired")
+        update(Opportunity)
+        .where(Opportunity.status == "stale", Opportunity.type.in_(["multi_outcome_arb", "tailing"]))
+        .values(status="expired")
     )
 
     await session.commit()

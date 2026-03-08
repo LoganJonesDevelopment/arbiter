@@ -14,6 +14,12 @@ router = APIRouter(prefix="/api")
 async def get_stats(session: AsyncSession = Depends(get_session)):
     events_count = await session.scalar(select(func.count(Event.id)).where(Event.active.is_(True)))
     markets_count = await session.scalar(select(func.count(Market.id)).where(Market.active.is_(True)))
+    poly_events = await session.scalar(
+        select(func.count(Event.id)).where(Event.active.is_(True), Event.source == "polymarket")
+    )
+    kalshi_events = await session.scalar(
+        select(func.count(Event.id)).where(Event.active.is_(True), Event.source == "kalshi")
+    )
     active_opps = await session.scalar(
         select(func.count(Opportunity.id)).where(Opportunity.status == "active")
     )
@@ -27,14 +33,22 @@ async def get_stats(session: AsyncSession = Depends(get_session)):
             Opportunity.status == "active", Opportunity.type == "tailing"
         )
     )
+    cross_opps = await session.scalar(
+        select(func.count(Opportunity.id)).where(
+            Opportunity.status == "active", Opportunity.type == "cross_exchange_arb"
+        )
+    )
     last_snapshot = await session.scalar(select(func.max(Snapshot.timestamp)))
 
     return {
         "events": events_count or 0,
         "markets": markets_count or 0,
+        "polymarket_events": poly_events or 0,
+        "kalshi_events": kalshi_events or 0,
         "active_opportunities": active_opps or 0,
         "multi_outcome_opportunities": multi_opps or 0,
         "tailing_opportunities": tailing_opps or 0,
+        "cross_exchange_opportunities": cross_opps or 0,
         "last_scan": last_snapshot.isoformat() if last_snapshot else None,
     }
 
