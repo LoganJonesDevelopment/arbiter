@@ -8,7 +8,113 @@ async function fetchJson(url: string, init?: RequestInit) {
   return res.json();
 }
 
-export async function fetchStats() {
+export interface Stats {
+  events: number;
+  markets: number;
+  polymarket_events: number;
+  kalshi_events: number;
+  active_opportunities: number;
+  multi_outcome_opportunities: number;
+  tailing_opportunities: number;
+  cross_exchange_opportunities: number;
+  last_scan: string | null;
+}
+
+export type OppType = 'multi_outcome_arb' | 'tailing' | 'cross_exchange_arb';
+export type Quality = 'high' | 'medium' | 'low' | 'theoretical';
+
+export interface MultiOutcomeDetails {
+  type: 'multi_outcome_arb';
+  event_id: string;
+  event_title: string;
+  slug: string;
+  category: string;
+  direction: string;
+  num_legs: number;
+  total_markets: number;
+  inactive_markets: number;
+  is_complete: boolean;
+  price_sum: number;
+  raw_edge_pct: number;
+  fee_adjusted_edge_pct: number;
+  total_fees: number;
+  profit_per_share: number;
+  est_profit_at_100: number;
+  trade_description: string;
+  total_volume: number;
+  min_liquidity: number;
+  has_thin_leg: boolean;
+  quality: Quality;
+  executable: boolean;
+}
+
+export interface TailingDetails {
+  type: 'tailing';
+  event_id: string;
+  event_title: string;
+  slug: string;
+  category: string;
+  market_id: string;
+  question: string;
+  likely_outcome: string;
+  price: number;
+  raw_edge_pct: number;
+  fee_adjusted_edge_pct: number;
+  profit_per_share: number;
+  est_profit_at_100: number;
+  trade_description: string;
+  volume: number;
+  liquidity: number;
+  momentum: string;
+  price_move: number;
+  quality: Quality;
+  executable: boolean;
+}
+
+export interface CrossExchangeDetails {
+  type: 'cross_exchange_arb';
+  match_confidence: number;
+  market_match_confidence?: number;
+  event_title: string;
+  poly_event_id: string;
+  kalshi_event_id: string;
+  poly_market_id: string;
+  kalshi_market_id: string;
+  poly_question: string;
+  kalshi_question: string;
+  strategy: string;
+  total_cost: number;
+  gross_profit: number;
+  net_profit: number;
+  edge_pct: number;
+  poly_yes: number;
+  poly_no: number;
+  kalshi_yes: number;
+  kalshi_no: number;
+  poly_volume: number;
+  kalshi_volume: number;
+  poly_liquidity: number;
+  kalshi_liquidity: number;
+  quality?: Quality;
+  executable?: boolean;
+}
+
+export type OppDetails = MultiOutcomeDetails | TailingDetails | CrossExchangeDetails;
+
+export interface Opportunity {
+  id: number;
+  opp_key: string;
+  type: OppType;
+  event_id: string;
+  edge_pct: number;
+  details: OppDetails;
+  markets_involved: string[];
+  first_seen: string;
+  last_seen: string;
+  status: string;
+}
+
+export async function fetchStats(): Promise<Stats> {
   return fetchJson(`${BASE}/stats`);
 }
 
@@ -17,7 +123,7 @@ export async function fetchOpportunities(params?: {
   status?: string;
   sort_by?: string;
   limit?: number;
-}) {
+}): Promise<Opportunity[]> {
   const search = new URLSearchParams();
   if (params?.type) search.set('type', params.type);
   if (params?.status) search.set('status', params.status);
@@ -26,7 +132,28 @@ export async function fetchOpportunities(params?: {
   return fetchJson(`${BASE}/opportunities?${search}`);
 }
 
-export async function fetchEventDetail(eventId: string) {
+export interface MarketData {
+  id: string;
+  question: string;
+  outcomes: string[];
+  outcome_prices: number[];
+  volume: number;
+  liquidity: number;
+  active: boolean;
+  closed: boolean;
+}
+
+export interface EventData {
+  id: string;
+  title: string;
+  slug: string;
+  category: string;
+  neg_risk: boolean;
+  markets_count: number;
+  markets: MarketData[];
+}
+
+export async function fetchEventDetail(eventId: string): Promise<EventData> {
   return fetchJson(`${BASE}/events/${eventId}`);
 }
 

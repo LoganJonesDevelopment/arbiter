@@ -1,218 +1,363 @@
-interface Opportunity {
-  id: number;
-  type: string;
-  edge_pct: number;
-  details: any;
-  first_seen: string;
-  last_seen: string;
-  status: string;
-}
+import type { Opportunity, OppDetails, MultiOutcomeDetails, TailingDetails, CrossExchangeDetails, Quality } from '../api';
 
 interface Props {
   opportunities: Opportunity[];
   onSelectEvent: (eventId: string) => void;
 }
 
-const qualityColors: Record<string, string> = {
-  high: 'bg-green-900/50 text-green-300 border-green-700',
-  medium: 'bg-yellow-900/50 text-yellow-300 border-yellow-700',
-  low: 'bg-orange-900/50 text-orange-300 border-orange-700',
-  theoretical: 'bg-gray-800/50 text-gray-500 border-gray-700',
+const qualityConfig: Record<Quality, { border: string; bg: string; text: string; label: string }> = {
+  high: { border: 'border-profit/40', bg: 'bg-profit/10', text: 'text-profit', label: 'HIGH' },
+  medium: { border: 'border-warn/40', bg: 'bg-warn/10', text: 'text-warn', label: 'MED' },
+  low: { border: 'border-orange-500/40', bg: 'bg-orange-500/10', text: 'text-orange-400', label: 'LOW' },
+  theoretical: { border: 'border-muted/40', bg: 'bg-muted/10', text: 'text-muted', label: 'THEO' },
 };
 
-const momentumLabels: Record<string, { text: string; color: string }> = {
-  surging: { text: 'SURGING', color: 'text-green-400' },
-  drifting_up: { text: 'Drifting up', color: 'text-green-600' },
-  stable: { text: 'Stable', color: 'text-gray-500' },
-  pulling_back: { text: 'Pulling back', color: 'text-red-400' },
+const typeConfig: Record<string, { label: string; color: string; bg: string }> = {
+  multi_outcome_arb: { label: 'MULTI', color: 'text-purple-400', bg: 'bg-purple-500/15' },
+  tailing: { label: 'TAIL', color: 'text-amber-400', bg: 'bg-amber-500/15' },
+  cross_exchange_arb: { label: 'CROSS', color: 'text-cyan-400', bg: 'bg-cyan-500/15' },
+};
+
+const momentumConfig: Record<string, { text: string; color: string }> = {
+  surging: { text: 'SURGING', color: 'text-profit' },
+  drifting_up: { text: 'DRIFT UP', color: 'text-green-600' },
+  stable: { text: 'STABLE', color: 'text-muted' },
+  pulling_back: { text: 'PULLBACK', color: 'text-loss' },
 };
 
 export function OpportunityTable({ opportunities, onSelectEvent }: Props) {
   if (opportunities.length === 0) {
     return (
-      <div className="text-center text-gray-500 py-12">
-        No opportunities found. Run a scan or adjust filters.
+      <div className="flex items-center justify-center h-48 text-muted text-sm border border-border rounded-lg bg-panel">
+        No opportunities. Run a scan or adjust filters.
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {opportunities.map((opp) => (
-        <OpportunityCard
-          key={opp.id}
-          opp={opp}
-          onSelectEvent={onSelectEvent}
-        />
+        <OpportunityRow key={opp.id} opp={opp} onSelectEvent={onSelectEvent} />
       ))}
     </div>
   );
 }
 
-function OpportunityCard({
-  opp,
-  onSelectEvent,
-}: {
-  opp: Opportunity;
-  onSelectEvent: (eventId: string) => void;
-}) {
+function OpportunityRow({ opp, onSelectEvent }: { opp: Opportunity; onSelectEvent: (id: string) => void }) {
   const d = opp.details;
-  const isMulti = opp.type === 'multi_outcome_arb';
-
-  const title = isMulti ? d.event_title : d.question;
-  const quality = d.quality || 'theoretical';
-  const qColor = qualityColors[quality] || qualityColors.theoretical;
+  const quality = getQuality(d);
+  const qc = qualityConfig[quality];
+  const tc = typeConfig[opp.type] || typeConfig.tailing;
+  const executable = isExecutable(d);
 
   return (
-    <div className={`bg-gray-900 border rounded-lg p-4 ${
-      d.executable ? 'border-gray-800' : 'border-gray-800/50 opacity-60'
+    <div className={`bg-panel border rounded-lg overflow-hidden transition-all ${
+      executable ? `${qc.border} hover:border-opacity-80` : 'border-border opacity-50 hover:opacity-70'
     }`}>
-      {/* Header row */}
-      <div className="flex items-start justify-between gap-4 mb-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            {isMulti ? (
-              <span className="shrink-0 px-2 py-0.5 rounded text-xs font-medium bg-purple-900/50 text-purple-300 border border-purple-700">
-                Multi-Outcome
-              </span>
-            ) : (
-              <span className="shrink-0 px-2 py-0.5 rounded text-xs font-medium bg-amber-900/50 text-amber-300 border border-amber-700">
-                Tailing
-              </span>
-            )}
-            <span className={`shrink-0 px-2 py-0.5 rounded text-xs font-medium border ${qColor}`}>
-              {quality}
-            </span>
-            {isMulti && !d.is_complete && (
-              <span className="shrink-0 px-2 py-0.5 rounded text-xs font-medium bg-red-900/50 text-red-300 border border-red-700">
-                {d.inactive_markets} unlisted slots
-              </span>
-            )}
-            {isMulti && d.is_complete && (
-              <span className="shrink-0 px-2 py-0.5 rounded text-xs font-medium bg-blue-900/50 text-blue-300 border border-blue-700">
-                complete
-              </span>
-            )}
-            {d.category && (
-              <span className="text-xs text-gray-600">{d.category}</span>
-            )}
-            {!isMulti && d.momentum && d.momentum !== 'stable' && (
-              <span className={`text-xs font-medium ${momentumLabels[d.momentum]?.color || ''}`}>
-                {momentumLabels[d.momentum]?.text}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onSelectEvent(d.event_id)}
-              className="text-blue-400 hover:text-blue-300 text-left cursor-pointer font-medium text-sm"
-            >
-              {title}
-            </button>
-            {d.slug && (
-              <a
-                href={`https://polymarket.com/event/${d.slug}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="shrink-0 text-gray-600 hover:text-gray-400 text-xs"
-              >
-                verify &rarr;
-              </a>
-            )}
-          </div>
-        </div>
+      <div className="flex items-stretch">
+        {/* Edge indicator bar */}
+        <div className={`w-1 shrink-0 ${
+          quality === 'high' ? 'bg-profit' :
+          quality === 'medium' ? 'bg-warn' :
+          quality === 'low' ? 'bg-orange-500' :
+          'bg-muted/30'
+        }`} />
 
-        {/* Edge + profit summary */}
-        <div className="text-right shrink-0">
-          <div className="flex items-baseline gap-2 justify-end">
-            <span className="text-xs text-gray-500">raw</span>
-            <span className="font-mono text-gray-400 text-sm">
-              {d.raw_edge_pct?.toFixed(2)}%
-            </span>
-            <span className="text-xs text-gray-500">net</span>
-            <span className={`font-mono font-bold text-lg ${
-              d.fee_adjusted_edge_pct > 2 ? 'text-green-400' :
-              d.fee_adjusted_edge_pct > 0 ? 'text-yellow-400' :
-              'text-red-400'
-            }`}>
-              {d.fee_adjusted_edge_pct?.toFixed(2)}%
-            </span>
-          </div>
-          {d.executable && d.est_profit_at_100 != null && (
-            <div className="text-xs text-gray-500 mt-0.5">
-              ~${d.est_profit_at_100.toFixed(2)} profit per $100
+        <div className="flex-1 min-w-0 p-3">
+          {/* Top row: badges + title + edge */}
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider ${tc.bg} ${tc.color}`}>
+                  {tc.label}
+                </span>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider ${qc.bg} ${qc.text}`}>
+                  {qc.label}
+                </span>
+                {opp.type === 'cross_exchange_arb' && (
+                  <>
+                    <SourceBadge source="polymarket" />
+                    <span className="text-muted text-[10px]">/</span>
+                    <SourceBadge source="kalshi" />
+                  </>
+                )}
+                {opp.type === 'multi_outcome_arb' && (
+                  <SourceBadge source="polymarket" />
+                )}
+                {opp.type === 'tailing' && (
+                  <SourceBadge source="polymarket" />
+                )}
+                {opp.type === 'multi_outcome_arb' && renderMultiBadges(d as MultiOutcomeDetails)}
+                {opp.type === 'tailing' && renderTailingBadges(d as TailingDetails)}
+                {opp.type === 'cross_exchange_arb' && renderCrossBadges(d as CrossExchangeDetails)}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => onSelectEvent(opp.event_id)}
+                  className="text-left cursor-pointer text-sm font-medium text-text hover:text-blue-400 truncate"
+                >
+                  {getTitle(d)}
+                </button>
+                {renderVerifyLinks(opp)}
+              </div>
             </div>
-          )}
-        </div>
-      </div>
 
-      {/* Trade description */}
-      <div className={`rounded px-3 py-2 mb-3 text-sm font-mono ${
-        d.executable
-          ? 'bg-gray-950 text-gray-300'
-          : 'bg-red-950/30 text-gray-400'
-      }`}>
-        {d.trade_description}
-      </div>
-
-      {/* Stats row */}
-      <div className="flex gap-6 text-xs text-gray-500 flex-wrap">
-        <div>
-          <span className="text-gray-600">Volume: </span>
-          <span className="text-gray-400 font-mono">
-            ${formatNumber(isMulti ? d.total_volume : d.volume)}
-          </span>
-        </div>
-        <div>
-          <span className="text-gray-600">{isMulti ? 'Min liq: ' : 'Liquidity: '}</span>
-          <span className={`font-mono ${
-            (isMulti ? d.min_liquidity : d.liquidity) > 2000 ? 'text-gray-400' : 'text-orange-400'
-          }`}>
-            ${formatNumber(isMulti ? d.min_liquidity : d.liquidity)}
-          </span>
-        </div>
-        {isMulti && (
-          <>
-            <div>
-              <span className="text-gray-600">Active legs: </span>
-              <span className="text-gray-400">{d.num_legs}</span>
-              {!d.is_complete && (
-                <span className="text-red-400"> / {d.total_markets} total</span>
-              )}
-            </div>
-            <div>
-              <span className="text-gray-600">Sum: </span>
-              <span className="text-gray-400 font-mono">${d.price_sum}</span>
-            </div>
-          </>
-        )}
-        {!isMulti && (
-          <>
-            <div>
-              <span className="text-gray-600">Price: </span>
-              <span className="text-gray-400 font-mono">{d.likely_outcome} @ {(d.price * 100).toFixed(1)}%</span>
-            </div>
-            {d.price_move !== 0 && (
-              <div>
-                <span className="text-gray-600">Move: </span>
-                <span className={`font-mono ${d.price_move > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  {d.price_move > 0 ? '+' : ''}{(d.price_move * 100).toFixed(1)}%
+            {/* Edge display */}
+            <div className="text-right shrink-0 tabular-nums">
+              <div className="flex items-baseline gap-1.5 justify-end">
+                <span className="text-[10px] text-muted uppercase">raw</span>
+                <span className="text-xs text-text-dim">
+                  {getRawEdge(d).toFixed(2)}%
                 </span>
               </div>
-            )}
-          </>
-        )}
-        {d.has_thin_leg && (
-          <span className="text-orange-400">thin liquidity on some legs</span>
-        )}
+              <div className={`text-lg font-bold leading-tight ${edgeColor(getNetEdge(d))}`}>
+                {getNetEdge(d).toFixed(2)}%
+              </div>
+              {executable && getProfit(d) > 0 && (
+                <div className="text-[10px] text-text-dim">
+                  ~${getProfit(d).toFixed(2)}/100
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Strategy/trade description */}
+          <div className={`rounded px-2.5 py-1.5 text-xs mb-2 ${
+            executable ? 'bg-panel-lighter text-text-dim' : 'bg-loss/5 text-muted'
+          }`}>
+            {getTradeDesc(d)}
+          </div>
+
+          {/* Stats row */}
+          <div className="flex gap-4 text-[11px] text-muted flex-wrap tabular-nums">
+            {opp.type === 'multi_outcome_arb' && renderMultiStats(d as MultiOutcomeDetails)}
+            {opp.type === 'tailing' && renderTailingStats(d as TailingDetails)}
+            {opp.type === 'cross_exchange_arb' && renderCrossStats(d as CrossExchangeDetails)}
+            <Stat label="seen" value={formatAge(opp.first_seen)} />
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function formatNumber(n: number): string {
-  if (!n && n !== 0) return '$0';
+function SourceBadge({ source }: { source: 'polymarket' | 'kalshi' }) {
+  if (source === 'polymarket') {
+    return (
+      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider bg-poly/15 text-poly">
+        POLY
+      </span>
+    );
+  }
+  return (
+    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider bg-kalshi/15 text-kalshi">
+      KALSHI
+    </span>
+  );
+}
+
+function Stat({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
+  return (
+    <div>
+      <span className="text-muted/60">{label} </span>
+      <span className={warn ? 'text-orange-400' : 'text-text-dim'}>{value}</span>
+    </div>
+  );
+}
+
+function renderMultiBadges(d: MultiOutcomeDetails) {
+  return (
+    <>
+      {!d.is_complete && (
+        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-loss/15 text-loss">
+          {d.inactive_markets} UNLISTED
+        </span>
+      )}
+      {d.is_complete && (
+        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/15 text-blue-400">
+          COMPLETE
+        </span>
+      )}
+    </>
+  );
+}
+
+function renderTailingBadges(d: TailingDetails) {
+  const mc = momentumConfig[d.momentum];
+  if (!mc || d.momentum === 'stable') return null;
+  return (
+    <span className={`text-[10px] font-bold ${mc.color}`}>
+      {mc.text}
+    </span>
+  );
+}
+
+function renderCrossBadges(d: CrossExchangeDetails) {
+  return (
+    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-panel-lighter text-text-dim">
+      {(d.match_confidence * 100).toFixed(0)}% match
+    </span>
+  );
+}
+
+function renderVerifyLinks(opp: Opportunity) {
+  const d = opp.details;
+
+  if (opp.type === 'cross_exchange_arb') {
+    const cd = d as CrossExchangeDetails;
+    return (
+      <div className="flex items-center gap-2 shrink-0">
+        <a
+          href={`https://polymarket.com/event/${cd.poly_event_id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[10px] text-poly/60 hover:text-poly"
+        >
+          poly
+        </a>
+        <a
+          href={`https://kalshi.com/markets/${cd.kalshi_market_id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[10px] text-kalshi/60 hover:text-kalshi"
+        >
+          kalshi
+        </a>
+      </div>
+    );
+  }
+
+  const slug = (d as MultiOutcomeDetails | TailingDetails).slug;
+  if (!slug) return null;
+
+  return (
+    <a
+      href={`https://polymarket.com/event/${slug}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-[10px] text-poly/60 hover:text-poly shrink-0"
+    >
+      verify
+    </a>
+  );
+}
+
+function renderMultiStats(d: MultiOutcomeDetails) {
+  return (
+    <>
+      <Stat label="legs" value={`${d.num_legs}${!d.is_complete ? `/${d.total_markets}` : ''}`} />
+      <Stat label="sum" value={`$${d.price_sum.toFixed(4)}`} />
+      <Stat label="vol" value={`$${fmtNum(d.total_volume)}`} />
+      <Stat label="min liq" value={`$${fmtNum(d.min_liquidity)}`} warn={d.min_liquidity < 2000} />
+      {d.has_thin_leg && <span className="text-orange-400">thin leg</span>}
+    </>
+  );
+}
+
+function renderTailingStats(d: TailingDetails) {
+  return (
+    <>
+      <Stat label="price" value={`${d.likely_outcome} @ ${(d.price * 100).toFixed(1)}c`} />
+      {d.price_move !== 0 && (
+        <div>
+          <span className="text-muted/60">move </span>
+          <span className={d.price_move > 0 ? 'text-profit' : 'text-loss'}>
+            {d.price_move > 0 ? '+' : ''}{(d.price_move * 100).toFixed(1)}c
+          </span>
+        </div>
+      )}
+      <Stat label="vol" value={`$${fmtNum(d.volume)}`} />
+      <Stat label="liq" value={`$${fmtNum(d.liquidity)}`} warn={d.liquidity < 2000} />
+    </>
+  );
+}
+
+function renderCrossStats(d: CrossExchangeDetails) {
+  return (
+    <>
+      <div>
+        <span className="text-poly/60">P </span>
+        <span className="text-text-dim">Y:{(d.poly_yes * 100).toFixed(1)}c N:{(d.poly_no * 100).toFixed(1)}c</span>
+      </div>
+      <div>
+        <span className="text-kalshi/60">K </span>
+        <span className="text-text-dim">Y:{(d.kalshi_yes * 100).toFixed(1)}c N:{(d.kalshi_no * 100).toFixed(1)}c</span>
+      </div>
+      <Stat label="cost" value={`$${d.total_cost.toFixed(4)}`} />
+      <Stat label="net" value={`$${d.net_profit.toFixed(4)}`} />
+      <Stat label="p.vol" value={`$${fmtNum(d.poly_volume)}`} />
+      <Stat label="k.vol" value={`$${fmtNum(d.kalshi_volume)}`} />
+    </>
+  );
+}
+
+function getTitle(d: OppDetails): string {
+  if (d.type === 'cross_exchange_arb') return d.event_title || d.poly_question || '';
+  if (d.type === 'multi_outcome_arb') return d.event_title;
+  return d.question || d.event_title;
+}
+
+function getQuality(d: OppDetails): Quality {
+  if ('quality' in d && d.quality) return d.quality;
+  if (d.type === 'cross_exchange_arb') {
+    if (d.net_profit > 0.02) return 'high';
+    if (d.net_profit > 0) return 'medium';
+    return 'theoretical';
+  }
+  return 'theoretical';
+}
+
+function isExecutable(d: OppDetails): boolean {
+  if ('executable' in d) return !!d.executable;
+  if (d.type === 'cross_exchange_arb') return d.net_profit > 0;
+  return false;
+}
+
+function getRawEdge(d: OppDetails): number {
+  if ('raw_edge_pct' in d) return d.raw_edge_pct;
+  if (d.type === 'cross_exchange_arb') return ((d.gross_profit / d.total_cost) * 100);
+  return 0;
+}
+
+function getNetEdge(d: OppDetails): number {
+  if ('fee_adjusted_edge_pct' in d) return d.fee_adjusted_edge_pct;
+  if (d.type === 'cross_exchange_arb') return d.edge_pct;
+  return 0;
+}
+
+function getProfit(d: OppDetails): number {
+  if ('est_profit_at_100' in d) return d.est_profit_at_100;
+  if (d.type === 'cross_exchange_arb') return d.net_profit * (100 / d.total_cost);
+  return 0;
+}
+
+function getTradeDesc(d: OppDetails): string {
+  if ('trade_description' in d) return d.trade_description;
+  if (d.type === 'cross_exchange_arb') return d.strategy;
+  return '';
+}
+
+function edgeColor(edge: number): string {
+  if (edge > 2) return 'text-profit';
+  if (edge > 0) return 'text-warn';
+  return 'text-loss';
+}
+
+function fmtNum(n: number): string {
+  if (!n && n !== 0) return '0';
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
   return n.toFixed(0);
+}
+
+function formatAge(iso: string): string {
+  const d = new Date(iso + 'Z');
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return '<1m';
+  if (diffMin < 60) return `${diffMin}m`;
+  const diffHrs = Math.floor(diffMin / 60);
+  if (diffHrs < 24) return `${diffHrs}h`;
+  return `${Math.floor(diffHrs / 24)}d`;
 }

@@ -1,29 +1,22 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { fetchStats, fetchOpportunities, triggerScan } from './api';
+import type { Stats, Opportunity, Quality } from './api';
 import { OpportunityTable } from './components/OpportunityTable';
 import { EventDetail } from './components/EventDetail';
 
-interface Stats {
-  events: number;
-  markets: number;
-  active_opportunities: number;
-  multi_outcome_opportunities: number;
-  tailing_opportunities: number;
-  last_scan: string | null;
-}
-
-type TypeFilter = 'all' | 'multi_outcome_arb' | 'tailing';
-type QualityFilter = 'all' | 'high' | 'medium' | 'low' | 'theoretical';
+type TypeFilter = 'all' | 'multi_outcome_arb' | 'tailing' | 'cross_exchange_arb';
+type QualityFilter = 'all' | Quality;
 
 export default function App() {
   const [stats, setStats] = useState<Stats | null>(null);
-  const [opportunities, setOpportunities] = useState<any[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>('all');
   const [hideTheoretical, setHideTheoretical] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
   const load = useCallback(async () => {
     try {
@@ -37,6 +30,7 @@ export default function App() {
       ]);
       setStats(s);
       setOpportunities(o);
+      setLastRefresh(new Date());
     } catch (e: any) {
       setError(e.message || 'Failed to load data');
     }
@@ -51,8 +45,9 @@ export default function App() {
   const filtered = useMemo(() => {
     return opportunities.filter((opp) => {
       const d = opp.details;
-      if (hideTheoretical && d.quality === 'theoretical') return false;
-      if (qualityFilter !== 'all' && d.quality !== qualityFilter) return false;
+      const quality = getOppQuality(d);
+      if (hideTheoretical && quality === 'theoretical') return false;
+      if (qualityFilter !== 'all' && quality !== qualityFilter) return false;
       return true;
     });
   }, [opportunities, qualityFilter, hideTheoretical]);
@@ -60,8 +55,17 @@ export default function App() {
   const qualityCounts = useMemo(() => {
     const counts = { high: 0, medium: 0, low: 0, theoretical: 0 };
     for (const opp of opportunities) {
-      const q = opp.details?.quality as keyof typeof counts;
+      const q = getOppQuality(opp.details);
       if (q in counts) counts[q]++;
+    }
+    return counts;
+  }, [opportunities]);
+
+  const typeCounts = useMemo(() => {
+    const counts = { multi_outcome_arb: 0, tailing: 0, cross_exchange_arb: 0 };
+    for (const opp of opportunities) {
+      const t = opp.type as keyof typeof counts;
+      if (t in counts) counts[t]++;
     }
     return counts;
   }, [opportunities]);
@@ -76,25 +80,15 @@ export default function App() {
     }
   };
 
-  const formatTime = (iso: string | null) => {
-    if (!iso) return 'Never';
-    const d = new Date(iso + 'Z');
-    const now = new Date();
-    const diffMs = now.getTime() - d.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return 'just now';
-    if (diffMin < 60) return `${diffMin}m ago`;
-    return d.toLocaleString();
-  };
-
   if (selectedEvent) {
     return (
-      <div className="min-h-screen bg-gray-950 text-gray-100 p-6">
+      <div className="min-h-screen bg-surface text-text p-5">
         <button
           onClick={() => setSelectedEvent(null)}
-          className="mb-4 text-blue-400 hover:text-blue-300 cursor-pointer"
+          className="mb-4 text-xs text-muted hover:text-text cursor-pointer flex items-center gap-1"
         >
-          &larr; Back to opportunities
+          <span className="text-base leading-none">&larr;</span>
+          <span>BACK</span>
         </button>
         <EventDetail eventId={selectedEvent} />
       </div>
@@ -102,138 +96,231 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
-      <header className="border-b border-gray-800 px-6 py-4">
-        <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Arbiter</h1>
-            <p className="text-sm text-gray-500">Polymarket Opportunity Scanner</p>
-          </div>
+    <div className="min-h-screen bg-surface text-text">
+      {/* Header */}
+      <header className="border-b border-border px-5 py-3">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <span className="text-xs text-gray-500">
-              Scan: {formatTime(stats?.last_scan ?? null)}
-            </span>
+            <div>
+              <h1 className="text-base font-bold tracking-tight text-text">ARBITER</h1>
+              <p className="text-[10px] text-muted uppercase tracking-widest">Prediction Market Scanner</p>
+            </div>
+            {stats && (
+              <div className="flex items-center gap-3 ml-4 text-[10px] text-muted border-l border-border pl-4 tabular-nums">
+                <span><span className="text-poly">POLY</span> {stats.polymarket_events}</span>
+                <span><span className="text-kalshi">KALSHI</span> {stats.kalshi_events}</span>
+                <span className="text-border-light">|</span>
+                <span>{stats.markets} mkts</span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <StatusIndicator lastScan={stats?.last_scan ?? null} lastRefresh={lastRefresh} />
             <button
               onClick={handleScan}
               disabled={scanning}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 rounded text-sm font-medium cursor-pointer disabled:cursor-not-allowed"
+              className={`px-3 py-1.5 rounded text-xs font-bold tracking-wider cursor-pointer transition-all ${
+                scanning
+                  ? 'bg-panel-lighter text-muted cursor-not-allowed'
+                  : 'bg-poly/20 text-poly hover:bg-poly/30 border border-poly/30'
+              }`}
             >
-              {scanning ? 'Scanning...' : 'Scan Now'}
+              {scanning ? 'SCANNING...' : 'SCAN'}
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-6">
+      <main className="p-5">
         {error && (
-          <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded text-red-200 text-sm">
+          <div className="mb-4 px-3 py-2 bg-loss/10 border border-loss/30 rounded text-loss text-xs">
             {error}
           </div>
         )}
 
-        {/* Quality summary cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <QualityCard
-            label="High Quality"
+        {/* Stats bar */}
+        <div className="grid grid-cols-4 gap-3 mb-4">
+          <StatCard
+            label="High"
             value={qualityCounts.high}
-            desc="Real arb, good edge + liquidity"
-            color="text-green-400"
+            sub="executable, good edge + liq"
+            accent="text-profit"
+            glow={qualityCounts.high > 0}
             active={qualityFilter === 'high'}
             onClick={() => setQualityFilter(qualityFilter === 'high' ? 'all' : 'high')}
           />
-          <QualityCard
+          <StatCard
             label="Medium"
             value={qualityCounts.medium}
-            desc="Tailing plays, small but real edge"
-            color="text-yellow-400"
+            sub="real edge, smaller margin"
+            accent="text-warn"
             active={qualityFilter === 'medium'}
             onClick={() => setQualityFilter(qualityFilter === 'medium' ? 'all' : 'medium')}
           />
-          <QualityCard
+          <StatCard
             label="Low"
             value={qualityCounts.low}
-            desc="Positive edge after fees, thin margin"
-            color="text-orange-400"
+            sub="positive after fees, thin"
+            accent="text-orange-400"
             active={qualityFilter === 'low'}
             onClick={() => setQualityFilter(qualityFilter === 'low' ? 'all' : 'low')}
           />
-          <QualityCard
+          <StatCard
             label="Theoretical"
             value={qualityCounts.theoretical}
-            desc="Not executable: fees, placeholders, or shorting"
-            color="text-gray-500"
+            sub="not executable"
+            accent="text-muted"
             active={qualityFilter === 'theoretical'}
             onClick={() => setQualityFilter(qualityFilter === 'theoretical' ? 'all' : 'theoretical')}
           />
         </div>
 
         {/* Filters */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex gap-2">
-            {(['all', 'multi_outcome_arb', 'tailing'] as TypeFilter[]).map((f) => (
-              <button
-                key={f}
-                onClick={() => setTypeFilter(f)}
-                className={`px-3 py-1 rounded text-sm cursor-pointer ${
-                  typeFilter === f
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                }`}
-              >
-                {f === 'all' ? 'All' : f === 'multi_outcome_arb' ? 'Multi-Outcome Arb' : 'Tailing'}
-              </button>
-            ))}
+        <div className="flex items-center justify-between mb-3 gap-4">
+          <div className="flex gap-1">
+            <TypeButton
+              active={typeFilter === 'all'}
+              onClick={() => setTypeFilter('all')}
+              label="ALL"
+              count={opportunities.length}
+            />
+            <TypeButton
+              active={typeFilter === 'multi_outcome_arb'}
+              onClick={() => setTypeFilter('multi_outcome_arb')}
+              label="MULTI"
+              count={typeCounts.multi_outcome_arb}
+              color="text-purple-400"
+            />
+            <TypeButton
+              active={typeFilter === 'tailing'}
+              onClick={() => setTypeFilter('tailing')}
+              label="TAIL"
+              count={typeCounts.tailing}
+              color="text-amber-400"
+            />
+            <TypeButton
+              active={typeFilter === 'cross_exchange_arb'}
+              onClick={() => setTypeFilter('cross_exchange_arb')}
+              label="CROSS"
+              count={typeCounts.cross_exchange_arb}
+              color="text-cyan-400"
+            />
           </div>
-          <div className="flex items-center gap-4 text-sm">
-            <label className="flex items-center gap-2 text-gray-400 cursor-pointer">
+          <div className="flex items-center gap-4 text-[11px]">
+            <label className="flex items-center gap-1.5 text-muted cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={hideTheoretical}
                 onChange={(e) => setHideTheoretical(e.target.checked)}
-                className="cursor-pointer"
+                className="cursor-pointer accent-poly"
               />
-              Hide theoretical
+              hide theoretical
             </label>
-            <span className="text-gray-600">
-              {filtered.length} shown / {opportunities.length} total
+            <span className="text-muted/50 tabular-nums">
+              {filtered.length}/{opportunities.length}
             </span>
           </div>
         </div>
 
-        <OpportunityTable
-          opportunities={filtered}
-          onSelectEvent={setSelectedEvent}
-        />
+        <OpportunityTable opportunities={filtered} onSelectEvent={setSelectedEvent} />
       </main>
     </div>
   );
 }
 
-function QualityCard({
-  label,
-  value,
-  desc,
-  color,
-  active,
-  onClick,
+function StatusIndicator({ lastScan, lastRefresh }: { lastScan: string | null; lastRefresh: Date }) {
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => setTick(t => t + 1), 10_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const scanAge = lastScan ? formatTimeDiff(new Date(lastScan + 'Z')) : null;
+  const refreshAge = formatTimeDiff(lastRefresh);
+
+  return (
+    <div className="flex items-center gap-3 text-[10px] text-muted tabular-nums">
+      <div className="flex items-center gap-1">
+        <div className={`w-1.5 h-1.5 rounded-full ${scanAge ? 'bg-profit' : 'bg-loss'}`}
+          style={scanAge ? { animation: 'pulse-green 3s ease-in-out infinite' } : undefined}
+        />
+        <span>scan {scanAge || 'never'}</span>
+      </div>
+      <span className="text-border-light">|</span>
+      <span>refresh {refreshAge}</span>
+    </div>
+  );
+}
+
+function StatCard({
+  label, value, sub, accent, glow, active, onClick,
 }: {
   label: string;
   value: number;
-  desc: string;
-  color: string;
+  sub: string;
+  accent: string;
+  glow?: boolean;
   active: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`text-left bg-gray-900 border rounded-lg p-4 cursor-pointer transition-colors ${
-        active ? 'border-blue-500 bg-gray-900/80' : 'border-gray-800 hover:border-gray-700'
-      }`}
+      className={`text-left bg-panel border rounded-lg p-3 cursor-pointer transition-all ${
+        active
+          ? 'border-poly/50 bg-poly/5'
+          : 'border-border hover:border-border-light'
+      } ${glow ? 'shadow-[0_0_12px_rgba(34,197,94,0.08)]' : ''}`}
     >
-      <div className="text-xs text-gray-500 uppercase tracking-wide">{label}</div>
-      <div className={`text-2xl font-bold mt-1 ${color}`}>{value}</div>
-      <div className="text-xs text-gray-600 mt-1">{desc}</div>
+      <div className="text-[10px] text-muted uppercase tracking-wider">{label}</div>
+      <div className={`text-2xl font-bold mt-0.5 tabular-nums ${accent}`}>{value}</div>
+      <div className="text-[10px] text-muted/50 mt-0.5">{sub}</div>
     </button>
   );
+}
+
+function TypeButton({
+  active, onClick, label, count, color,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  count: number;
+  color?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-2.5 py-1 rounded text-[11px] font-bold tracking-wider cursor-pointer transition-all flex items-center gap-1.5 ${
+        active
+          ? 'bg-poly/20 text-poly border border-poly/30'
+          : 'bg-panel text-muted border border-border hover:border-border-light hover:text-text-dim'
+      }`}
+    >
+      <span className={active ? '' : (color || '')}>{label}</span>
+      <span className={`text-[10px] ${active ? 'text-poly/60' : 'text-muted/40'} tabular-nums`}>{count}</span>
+    </button>
+  );
+}
+
+function getOppQuality(d: any): Quality {
+  if (d.quality) return d.quality;
+  if (d.type === 'cross_exchange_arb') {
+    if (d.net_profit > 0.02) return 'high';
+    if (d.net_profit > 0) return 'medium';
+    return 'theoretical';
+  }
+  return 'theoretical';
+}
+
+function formatTimeDiff(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return '<1m';
+  if (diffMin < 60) return `${diffMin}m`;
+  const diffHrs = Math.floor(diffMin / 60);
+  if (diffHrs < 24) return `${diffHrs}h`;
+  return `${Math.floor(diffHrs / 24)}d`;
 }
