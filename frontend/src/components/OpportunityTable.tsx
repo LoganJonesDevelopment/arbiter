@@ -1,294 +1,268 @@
-import type { Opportunity, OppDetails, MultiOutcomeDetails, TailingDetails, CrossExchangeDetails, Quality } from '../api';
+import { memo } from 'react';
+import type { Opportunity, Quality, OppDetails } from '../api';
+import { getOppQuality, getRawEdge, getNetEdge, getProfit, getVolume, getLiquidity } from '../App';
+import type { SortField, SortDir } from '../App';
 
 interface Props {
   opportunities: Opportunity[];
-  onSelectEvent: (eventId: string) => void;
+  selectedId: number | null;
+  onSelect: (id: number | null) => void;
+  sortField: SortField;
+  sortDir: SortDir;
+  onSort: (field: SortField) => void;
 }
 
-const qualityConfig: Record<Quality, { border: string; bg: string; text: string; label: string }> = {
-  high: { border: 'border-profit/40', bg: 'bg-profit/10', text: 'text-profit', label: 'HIGH' },
-  medium: { border: 'border-warn/40', bg: 'bg-warn/10', text: 'text-warn', label: 'MED' },
-  low: { border: 'border-orange-500/40', bg: 'bg-orange-500/10', text: 'text-orange-400', label: 'LOW' },
-  theoretical: { border: 'border-muted/40', bg: 'bg-muted/10', text: 'text-muted', label: 'THEO' },
+const qualityBarColor: Record<Quality, string> = {
+  high: '#3fb950',
+  medium: '#d29922',
+  low: '#da6d25',
+  theoretical: 'transparent',
 };
 
-const typeConfig: Record<string, { label: string; color: string; bg: string }> = {
-  multi_outcome_arb: { label: 'MULTI', color: 'text-purple-400', bg: 'bg-purple-500/15' },
-  tailing: { label: 'TAIL', color: 'text-amber-400', bg: 'bg-amber-500/15' },
-  cross_exchange_arb: { label: 'CROSS', color: 'text-cyan-400', bg: 'bg-cyan-500/15' },
+const typeLabels: Record<string, string> = {
+  multi_outcome_arb: 'MULTI',
+  tailing: 'TAIL',
+  cross_exchange_arb: 'CROSS',
 };
 
-const momentumConfig: Record<string, { text: string; color: string }> = {
-  surging: { text: 'SURGING', color: 'text-profit' },
-  drifting_up: { text: 'DRIFT UP', color: 'text-green-600' },
-  stable: { text: 'STABLE', color: 'text-muted' },
-  pulling_back: { text: 'PULLBACK', color: 'text-loss' },
-};
-
-export function OpportunityTable({ opportunities, onSelectEvent }: Props) {
+export function OpportunityTable({ opportunities, selectedId, onSelect, sortField, sortDir, onSort }: Props) {
   if (opportunities.length === 0) {
     return (
-      <div className="flex items-center justify-center h-48 text-muted text-sm border border-border rounded-lg bg-panel">
+      <div className="flex items-center justify-center h-48 text-text-secondary text-[13px]">
         No opportunities. Run a scan or adjust filters.
       </div>
     );
   }
 
   return (
-    <div className="space-y-2">
-      {opportunities.map((opp) => (
-        <OpportunityRow key={opp.id} opp={opp} onSelectEvent={onSelectEvent} />
-      ))}
-    </div>
+    <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
+      <colgroup>
+        <col style={{ width: '3px' }} />
+        <col style={{ width: '52px' }} />
+        <col style={{ width: '68px' }} />
+        <col />
+        <col style={{ width: '72px' }} />
+        <col style={{ width: '80px' }} />
+        <col style={{ width: '72px' }} />
+        <col style={{ width: '72px' }} />
+        <col style={{ width: '72px' }} />
+        <col style={{ width: '44px' }} />
+        <col style={{ width: '28px' }} />
+      </colgroup>
+      <thead className="sticky top-0 z-10 bg-panel">
+        <tr className="border-b border-border">
+          <th />
+          <ColHeader label="TYPE" />
+          <ColHeader label="SOURCE" />
+          <ColHeader label="TITLE" />
+          <ColHeader label="RAW" field="raw_edge" align="right" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <ColHeader label="NET EDGE" field="net_edge" align="right" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <ColHeader label="PROFIT" field="profit" align="right" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <ColHeader label="VOL" field="volume" align="right" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <ColHeader label="LIQ" field="liquidity" align="right" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <ColHeader label="AGE" field="age" align="right" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <th />
+        </tr>
+      </thead>
+      <tbody>
+        {opportunities.map((opp) => (
+          <TableRow
+            key={opp.id}
+            opp={opp}
+            selected={opp.id === selectedId}
+            onSelect={onSelect}
+          />
+        ))}
+      </tbody>
+    </table>
   );
 }
 
-function OpportunityRow({ opp, onSelectEvent }: { opp: Opportunity; onSelectEvent: (id: string) => void }) {
-  const d = opp.details;
-  const quality = getQuality(d);
-  const qc = qualityConfig[quality];
-  const tc = typeConfig[opp.type] || typeConfig.tailing;
-  const executable = isExecutable(d);
+function ColHeader({
+  label,
+  field,
+  align,
+  sortField,
+  sortDir,
+  onSort,
+}: {
+  label: string;
+  field?: SortField;
+  align?: 'left' | 'right';
+  sortField?: SortField;
+  sortDir?: SortDir;
+  onSort?: (f: SortField) => void;
+}) {
+  const isActive = field && sortField === field;
+  const clickable = !!field && !!onSort;
 
   return (
-    <div className={`bg-panel border rounded-lg overflow-hidden transition-all ${
-      executable ? `${qc.border} hover:border-opacity-80` : 'border-border opacity-50 hover:opacity-70'
-    }`}>
-      <div className="flex items-stretch">
-        {/* Edge indicator bar */}
-        <div className={`w-1 shrink-0 ${
-          quality === 'high' ? 'bg-profit' :
-          quality === 'medium' ? 'bg-warn' :
-          quality === 'low' ? 'bg-orange-500' :
-          'bg-muted/30'
-        }`} />
-
-        <div className="flex-1 min-w-0 p-3">
-          {/* Top row: badges + title + edge */}
-          <div className="flex items-start justify-between gap-3 mb-2">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider ${tc.bg} ${tc.color}`}>
-                  {tc.label}
-                </span>
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider ${qc.bg} ${qc.text}`}>
-                  {qc.label}
-                </span>
-                {opp.type === 'cross_exchange_arb' && (
-                  <>
-                    <SourceBadge source="polymarket" />
-                    <span className="text-muted text-[10px]">/</span>
-                    <SourceBadge source="kalshi" />
-                  </>
-                )}
-                {opp.type === 'multi_outcome_arb' && (
-                  <SourceBadge source="polymarket" />
-                )}
-                {opp.type === 'tailing' && (
-                  <SourceBadge source="polymarket" />
-                )}
-                {opp.type === 'multi_outcome_arb' && renderMultiBadges(d as MultiOutcomeDetails)}
-                {opp.type === 'tailing' && renderTailingBadges(d as TailingDetails)}
-                {opp.type === 'cross_exchange_arb' && renderCrossBadges(d as CrossExchangeDetails)}
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => onSelectEvent(opp.event_id)}
-                  className="text-left cursor-pointer text-sm font-medium text-text hover:text-blue-400 truncate"
-                >
-                  {getTitle(d)}
-                </button>
-                {renderVerifyLinks(opp)}
-              </div>
-            </div>
-
-            {/* Edge display */}
-            <div className="text-right shrink-0 tabular-nums">
-              <div className="flex items-baseline gap-1.5 justify-end">
-                <span className="text-[10px] text-muted uppercase">raw</span>
-                <span className="text-xs text-text-dim">
-                  {getRawEdge(d).toFixed(2)}%
-                </span>
-              </div>
-              <div className={`text-lg font-bold leading-tight ${edgeColor(getNetEdge(d))}`}>
-                {getNetEdge(d).toFixed(2)}%
-              </div>
-              {executable && getProfit(d) > 0 && (
-                <div className="text-[10px] text-text-dim">
-                  ~${getProfit(d).toFixed(2)}/100
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Strategy/trade description */}
-          <div className={`rounded px-2.5 py-1.5 text-xs mb-2 ${
-            executable ? 'bg-panel-lighter text-text-dim' : 'bg-loss/5 text-muted'
-          }`}>
-            {getTradeDesc(d)}
-          </div>
-
-          {/* Stats row */}
-          <div className="flex gap-4 text-[11px] text-muted flex-wrap tabular-nums">
-            {opp.type === 'multi_outcome_arb' && renderMultiStats(d as MultiOutcomeDetails)}
-            {opp.type === 'tailing' && renderTailingStats(d as TailingDetails)}
-            {opp.type === 'cross_exchange_arb' && renderCrossStats(d as CrossExchangeDetails)}
-            <Stat label="seen" value={formatAge(opp.first_seen)} />
-          </div>
-        </div>
-      </div>
-    </div>
+    <th
+      className={`h-[28px] px-2 text-[11px] font-medium tracking-[0.04em] uppercase text-text-secondary select-none whitespace-nowrap ${
+        align === 'right' ? 'text-right' : 'text-left'
+      } ${clickable ? 'cursor-pointer hover:text-text-primary' : ''}`}
+      onClick={clickable ? () => onSort!(field!) : undefined}
+    >
+      <span className={isActive ? 'text-text-primary' : ''}>
+        {label}
+        {isActive && (
+          <span className="ml-0.5 text-[9px]">{sortDir === 'desc' ? '\u25BE' : '\u25B4'}</span>
+        )}
+      </span>
+    </th>
   );
 }
 
-function SourceBadge({ source }: { source: 'polymarket' | 'kalshi' }) {
-  if (source === 'polymarket') {
+const TableRow = memo(function TableRow({
+  opp,
+  selected,
+  onSelect,
+}: {
+  opp: Opportunity;
+  selected: boolean;
+  onSelect: (id: number | null) => void;
+}) {
+  const d = opp.details;
+  const quality = getOppQuality(d);
+  const executable = isExecutable(d);
+  const rawEdge = getRawEdge(d);
+  const netEdge = getNetEdge(d);
+  const profit = getProfit(d);
+  const volume = getVolume(d);
+  const liquidity = getLiquidity(d);
+
+  const barColor = qualityBarColor[quality];
+  const selectedBg = selected
+    ? `rgba(${quality === 'high' ? '63,185,80' : quality === 'medium' ? '210,153,34' : quality === 'low' ? '218,109,37' : '110,118,129'}, 0.05)`
+    : undefined;
+
+  return (
+    <tr
+      className={`h-[32px] border-b border-border cursor-pointer transition-[background-color] duration-150 ${
+        !executable ? 'opacity-40' : ''
+      } ${selected ? '' : 'hover:bg-panel-raised'}`}
+      style={{ backgroundColor: selectedBg }}
+      onClick={() => onSelect(selected ? null : opp.id)}
+    >
+      {/* Quality bar */}
+      <td className="p-0 relative">
+        <div
+          className="absolute inset-y-0 left-0"
+          style={{
+            width: selected ? '2px' : '3px',
+            backgroundColor: barColor,
+          }}
+        />
+      </td>
+
+      {/* Type badge */}
+      <td className="px-2">
+        <TypeBadge type={opp.type} />
+      </td>
+
+      {/* Source badges */}
+      <td className="px-2">
+        <SourceBadges type={opp.type} />
+      </td>
+
+      {/* Title */}
+      <td className="px-2 truncate text-[13px] text-text-primary">
+        {getTitle(d)}
+      </td>
+
+      {/* Raw Edge */}
+      <td className="px-2 text-right font-data tabular text-[11px] text-text-secondary">
+        {rawEdge.toFixed(2)}%
+      </td>
+
+      {/* Net Edge */}
+      <td className="px-2 text-right font-data tabular text-[13px] font-bold" style={{ color: edgeColor(netEdge) }}>
+        {netEdge.toFixed(2)}%
+      </td>
+
+      {/* Profit */}
+      <td className="px-2 text-right font-data tabular text-[11px] text-text-secondary">
+        {profit > 0 ? `$${profit.toFixed(2)}` : '\u2014'}
+      </td>
+
+      {/* Volume */}
+      <td className="px-2 text-right font-data tabular text-[11px] text-text-secondary">
+        ${fmtNum(volume)}
+      </td>
+
+      {/* Liquidity */}
+      <td className="px-2 text-right font-data tabular text-[11px]" style={{ color: liquidity < 2000 ? '#d29922' : '#8b949e' }}>
+        ${fmtNum(liquidity)}
+      </td>
+
+      {/* Age */}
+      <td className="px-2 text-right text-[10px] text-text-tertiary">
+        {formatAge(opp.first_seen)}
+      </td>
+
+      {/* Link */}
+      <td className="px-1 text-center">
+        <a
+          href={getLinkUrl(opp)}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="text-text-tertiary hover:text-text-link text-[11px]"
+          title="Open on exchange"
+        >
+          &#x2197;
+        </a>
+      </td>
+    </tr>
+  );
+});
+
+function TypeBadge({ type }: { type: string }) {
+  const label = typeLabels[type] || type;
+  const colors: Record<string, string> = {
+    multi_outcome_arb: 'color: #a78bfa; background: rgba(167,139,250,0.15)',
+    tailing: 'color: #fbbf24; background: rgba(251,191,36,0.15)',
+    cross_exchange_arb: 'color: #22d3ee; background: rgba(34,211,238,0.15)',
+  };
+
+  return (
+    <span
+      className="inline-block px-1 py-px text-[10px] font-semibold tracking-[0.04em] uppercase leading-none"
+      style={{ ...parseStyle(colors[type] || ''), borderRadius: '2px' }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function SourceBadges({ type }: { type: string }) {
+  if (type === 'cross_exchange_arb') {
     return (
-      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider bg-poly/15 text-poly">
-        POLY
+      <span className="flex items-center gap-0.5">
+        <span className="text-[10px] font-semibold tracking-[0.04em] text-poly">P</span>
+        <span className="text-text-tertiary text-[10px]">/</span>
+        <span className="text-[10px] font-semibold tracking-[0.04em] text-kalshi">K</span>
       </span>
     );
   }
-  return (
-    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider bg-kalshi/15 text-kalshi">
-      KALSHI
-    </span>
-  );
-}
-
-function Stat({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
-  return (
-    <div>
-      <span className="text-muted/60">{label} </span>
-      <span className={warn ? 'text-orange-400' : 'text-text-dim'}>{value}</span>
-    </div>
-  );
-}
-
-function renderMultiBadges(d: MultiOutcomeDetails) {
-  return (
-    <>
-      {!d.is_complete && (
-        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-loss/15 text-loss">
-          {d.inactive_markets} UNLISTED
-        </span>
-      )}
-      {d.is_complete && (
-        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/15 text-blue-400">
-          COMPLETE
-        </span>
-      )}
-    </>
-  );
-}
-
-function renderTailingBadges(d: TailingDetails) {
-  const mc = momentumConfig[d.momentum];
-  if (!mc || d.momentum === 'stable') return null;
-  return (
-    <span className={`text-[10px] font-bold ${mc.color}`}>
-      {mc.text}
-    </span>
-  );
-}
-
-function renderCrossBadges(d: CrossExchangeDetails) {
-  return (
-    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-panel-lighter text-text-dim">
-      {(d.match_confidence * 100).toFixed(0)}% match
-    </span>
-  );
-}
-
-function renderVerifyLinks(opp: Opportunity) {
-  const d = opp.details;
-
-  if (opp.type === 'cross_exchange_arb') {
-    const cd = d as CrossExchangeDetails;
+  if (type === 'tailing' || type === 'multi_outcome_arb') {
     return (
-      <div className="flex items-center gap-2 shrink-0">
-        <a
-          href={`https://polymarket.com/event/${cd.poly_event_id}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[10px] text-poly/60 hover:text-poly"
-        >
-          poly
-        </a>
-        <a
-          href={`https://kalshi.com/markets/${cd.kalshi_market_id}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[10px] text-kalshi/60 hover:text-kalshi"
-        >
-          kalshi
-        </a>
-      </div>
+      <span className="text-[10px] font-semibold tracking-[0.04em] text-poly">POLY</span>
     );
   }
-
-  const slug = (d as MultiOutcomeDetails | TailingDetails).slug;
-  if (!slug) return null;
-
-  return (
-    <a
-      href={`https://polymarket.com/event/${slug}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-[10px] text-poly/60 hover:text-poly shrink-0"
-    >
-      verify
-    </a>
-  );
+  return null;
 }
 
-function renderMultiStats(d: MultiOutcomeDetails) {
-  return (
-    <>
-      <Stat label="legs" value={`${d.num_legs}${!d.is_complete ? `/${d.total_markets}` : ''}`} />
-      <Stat label="sum" value={`$${d.price_sum.toFixed(4)}`} />
-      <Stat label="vol" value={`$${fmtNum(d.total_volume)}`} />
-      <Stat label="min liq" value={`$${fmtNum(d.min_liquidity)}`} warn={d.min_liquidity < 2000} />
-      {d.has_thin_leg && <span className="text-orange-400">thin leg</span>}
-    </>
-  );
-}
-
-function renderTailingStats(d: TailingDetails) {
-  return (
-    <>
-      <Stat label="price" value={`${d.likely_outcome} @ ${(d.price * 100).toFixed(1)}c`} />
-      {d.price_move !== 0 && (
-        <div>
-          <span className="text-muted/60">move </span>
-          <span className={d.price_move > 0 ? 'text-profit' : 'text-loss'}>
-            {d.price_move > 0 ? '+' : ''}{(d.price_move * 100).toFixed(1)}c
-          </span>
-        </div>
-      )}
-      <Stat label="vol" value={`$${fmtNum(d.volume)}`} />
-      <Stat label="liq" value={`$${fmtNum(d.liquidity)}`} warn={d.liquidity < 2000} />
-    </>
-  );
-}
-
-function renderCrossStats(d: CrossExchangeDetails) {
-  return (
-    <>
-      <div>
-        <span className="text-poly/60">P </span>
-        <span className="text-text-dim">Y:{(d.poly_yes * 100).toFixed(1)}c N:{(d.poly_no * 100).toFixed(1)}c</span>
-      </div>
-      <div>
-        <span className="text-kalshi/60">K </span>
-        <span className="text-text-dim">Y:{(d.kalshi_yes * 100).toFixed(1)}c N:{(d.kalshi_no * 100).toFixed(1)}c</span>
-      </div>
-      <Stat label="cost" value={`$${d.total_cost.toFixed(4)}`} />
-      <Stat label="net" value={`$${d.net_profit.toFixed(4)}`} />
-      <Stat label="p.vol" value={`$${fmtNum(d.poly_volume)}`} />
-      <Stat label="k.vol" value={`$${fmtNum(d.kalshi_volume)}`} />
-    </>
-  );
+function parseStyle(s: string): React.CSSProperties {
+  const obj: any = {};
+  for (const part of s.split(';')) {
+    const [k, v] = part.split(':').map(x => x.trim());
+    if (k && v) {
+      const key = k.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+      obj[key] = v;
+    }
+  }
+  return obj;
 }
 
 function getTitle(d: OppDetails): string {
@@ -297,50 +271,16 @@ function getTitle(d: OppDetails): string {
   return d.question || d.event_title;
 }
 
-function getQuality(d: OppDetails): Quality {
-  if ('quality' in d && d.quality) return d.quality;
-  if (d.type === 'cross_exchange_arb') {
-    if (d.net_profit > 0.02) return 'high';
-    if (d.net_profit > 0) return 'medium';
-    return 'theoretical';
-  }
-  return 'theoretical';
-}
-
 function isExecutable(d: OppDetails): boolean {
   if ('executable' in d) return !!d.executable;
   if (d.type === 'cross_exchange_arb') return d.net_profit > 0;
   return false;
 }
 
-function getRawEdge(d: OppDetails): number {
-  if ('raw_edge_pct' in d) return d.raw_edge_pct;
-  if (d.type === 'cross_exchange_arb') return ((d.gross_profit / d.total_cost) * 100);
-  return 0;
-}
-
-function getNetEdge(d: OppDetails): number {
-  if ('fee_adjusted_edge_pct' in d) return d.fee_adjusted_edge_pct;
-  if (d.type === 'cross_exchange_arb') return d.edge_pct;
-  return 0;
-}
-
-function getProfit(d: OppDetails): number {
-  if ('est_profit_at_100' in d) return d.est_profit_at_100;
-  if (d.type === 'cross_exchange_arb') return d.net_profit * (100 / d.total_cost);
-  return 0;
-}
-
-function getTradeDesc(d: OppDetails): string {
-  if ('trade_description' in d) return d.trade_description;
-  if (d.type === 'cross_exchange_arb') return d.strategy;
-  return '';
-}
-
 function edgeColor(edge: number): string {
-  if (edge > 2) return 'text-profit';
-  if (edge > 0) return 'text-warn';
-  return 'text-loss';
+  if (edge > 2) return '#3fb950';
+  if (edge > 0) return '#d29922';
+  return '#f85149';
 }
 
 function fmtNum(n: number): string {
@@ -360,4 +300,15 @@ function formatAge(iso: string): string {
   const diffHrs = Math.floor(diffMin / 60);
   if (diffHrs < 24) return `${diffHrs}h`;
   return `${Math.floor(diffHrs / 24)}d`;
+}
+
+function getLinkUrl(opp: Opportunity): string {
+  const d = opp.details;
+  if (d.type === 'cross_exchange_arb') {
+    return `https://polymarket.com/event/${d.poly_event_id}`;
+  }
+  if ('slug' in d && d.slug) {
+    return `https://polymarket.com/event/${d.slug}`;
+  }
+  return '#';
 }
