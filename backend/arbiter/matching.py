@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 MIN_EVENT_MATCH_CONFIDENCE = 0.6
 MIN_MARKET_MATCH_CONFIDENCE = 0.5
 MIN_VOLUME_FOR_ARB = 100
+MIN_LIQUIDITY_FOR_ARB = 500
 MIN_PRICE_FOR_ARB = 0.01
 MAX_EDGE_PCT = 25.0
 
@@ -82,7 +83,11 @@ def _jaccard(a: set[str], b: set[str]) -> float:
 def _market_has_price(m: Market) -> bool:
     if not m.outcome_prices or len(m.outcome_prices) < 2:
         return False
-    return m.outcome_prices[0] >= MIN_PRICE_FOR_ARB or m.outcome_prices[1] >= MIN_PRICE_FOR_ARB
+    if not (m.outcome_prices[0] >= MIN_PRICE_FOR_ARB or m.outcome_prices[1] >= MIN_PRICE_FOR_ARB):
+        return False
+    if (m.liquidity or 0) < MIN_LIQUIDITY_FOR_ARB:
+        return False
+    return True
 
 
 async def match_events(session: AsyncSession) -> list[dict]:
@@ -347,8 +352,10 @@ def _check_binary_arb(
                 "type": "cross_exchange_arb",
                 "match_confidence": em.confidence,
                 "event_title": poly_event.title if poly_event else "",
+                "slug": poly_event.slug if poly_event else "",
                 "poly_event_id": em.poly_event_id,
                 "kalshi_event_id": em.kalshi_event_id,
+                "kalshi_ticker": kalshi_market.condition_id or "",
                 "poly_market_id": poly_market.id,
                 "kalshi_market_id": kalshi_market.id,
                 "poly_question": poly_market.question,
@@ -367,6 +374,12 @@ def _check_binary_arb(
                 "kalshi_volume": round(kalshi_market.volume or 0, 2),
                 "poly_liquidity": round(poly_market.liquidity or 0, 2),
                 "kalshi_liquidity": round(kalshi_market.liquidity or 0, 2),
+                "executable": True,
+                "quality": (
+                    "high" if edge_pct > 2.0 and min(poly_market.liquidity or 0, kalshi_market.liquidity or 0) > 2000 else
+                    "medium" if edge_pct > 1.0 else
+                    "low"
+                ),
             }
 
     return best_arb

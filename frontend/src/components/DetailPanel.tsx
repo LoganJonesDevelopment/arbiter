@@ -40,38 +40,25 @@ export function DetailPanel({ opportunity, onClose }: Props) {
       <div className="flex-1 overflow-auto p-4">
         {/* Platform links */}
         <div className="flex items-center gap-3 mb-4 text-[11px]">
-          {d.type === 'cross_exchange_arb' ? (
-            <>
-              <a
-                href={`https://polymarket.com/event/${d.poly_event_id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-poly hover:underline"
-              >
-                Polymarket
-              </a>
-              <a
-                href={`https://kalshi.com/markets/${d.kalshi_market_id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-kalshi hover:underline"
-              >
-                Kalshi
-              </a>
-            </>
-          ) : (
-            <>
-              {('slug' in d && d.slug) && (
-                <a
-                  href={`https://polymarket.com/event/${d.slug}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-poly hover:underline"
-                >
-                  Polymarket
-                </a>
-              )}
-            </>
+          {'slug' in d && d.slug && (
+            <a
+              href={`https://polymarket.com/event/${d.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-poly hover:underline"
+            >
+              Polymarket
+            </a>
+          )}
+          {d.type === 'cross_exchange_arb' && (
+            <a
+              href={`https://kalshi.com/markets/${(d as any).kalshi_ticker || ''}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-kalshi hover:underline"
+            >
+              Kalshi
+            </a>
           )}
           {event && event.category && (
             <span className="text-text-tertiary">{event.category}</span>

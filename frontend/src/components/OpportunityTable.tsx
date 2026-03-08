@@ -1,23 +1,14 @@
 import { memo } from 'react';
-import type { Opportunity, Quality, OppDetails } from '../api';
-import { getOppQuality, getRawEdge, getNetEdge, getProfit, getVolume, getLiquidity } from '../App';
-import type { SortField, SortDir } from '../App';
+import type { Opportunity, OppDetails } from '../api';
+import type { SortField } from '../App';
 
 interface Props {
   opportunities: Opportunity[];
   selectedId: number | null;
   onSelect: (id: number | null) => void;
   sortField: SortField;
-  sortDir: SortDir;
   onSort: (field: SortField) => void;
 }
-
-const qualityBarColor: Record<Quality, string> = {
-  high: '#3fb950',
-  medium: '#d29922',
-  low: '#da6d25',
-  theoretical: 'transparent',
-};
 
 const typeLabels: Record<string, string> = {
   multi_outcome_arb: 'MULTI',
@@ -25,11 +16,11 @@ const typeLabels: Record<string, string> = {
   cross_exchange_arb: 'CROSS',
 };
 
-export function OpportunityTable({ opportunities, selectedId, onSelect, sortField, sortDir, onSort }: Props) {
+export function OpportunityTable({ opportunities, selectedId, onSelect, sortField, onSort }: Props) {
   if (opportunities.length === 0) {
     return (
       <div className="flex items-center justify-center h-48 text-text-secondary text-[13px]">
-        No opportunities. Run a scan or adjust filters.
+        No executable opportunities found. Uncheck "Executable only" to see all.
       </div>
     );
   }
@@ -39,10 +30,8 @@ export function OpportunityTable({ opportunities, selectedId, onSelect, sortFiel
       <colgroup>
         <col style={{ width: '3px' }} />
         <col style={{ width: '52px' }} />
-        <col style={{ width: '68px' }} />
         <col />
-        <col style={{ width: '72px' }} />
-        <col style={{ width: '80px' }} />
+        <col style={{ width: '56px' }} />
         <col style={{ width: '72px' }} />
         <col style={{ width: '72px' }} />
         <col style={{ width: '72px' }} />
@@ -53,14 +42,12 @@ export function OpportunityTable({ opportunities, selectedId, onSelect, sortFiel
         <tr className="border-b border-border">
           <th />
           <ColHeader label="TYPE" />
-          <ColHeader label="SOURCE" />
-          <ColHeader label="TITLE" />
-          <ColHeader label="RAW" field="raw_edge" align="right" sortField={sortField} sortDir={sortDir} onSort={onSort} />
-          <ColHeader label="NET EDGE" field="net_edge" align="right" sortField={sortField} sortDir={sortDir} onSort={onSort} />
-          <ColHeader label="PROFIT" field="profit" align="right" sortField={sortField} sortDir={sortDir} onSort={onSort} />
-          <ColHeader label="VOL" field="volume" align="right" sortField={sortField} sortDir={sortDir} onSort={onSort} />
-          <ColHeader label="LIQ" field="liquidity" align="right" sortField={sortField} sortDir={sortDir} onSort={onSort} />
-          <ColHeader label="AGE" field="age" align="right" sortField={sortField} sortDir={sortDir} onSort={onSort} />
+          <ColHeader label="ACTION" />
+          <ColHeader label="SCORE" field="score" align="right" active={sortField === 'score'} onSort={onSort} />
+          <ColHeader label="NET EDGE" field="net_edge" align="right" active={sortField === 'net_edge'} onSort={onSort} />
+          <ColHeader label="PROFIT" field="profit" align="right" active={sortField === 'profit'} onSort={onSort} />
+          <ColHeader label="LIQ" field="liquidity" align="right" active={sortField === 'liquidity'} onSort={onSort} />
+          <ColHeader label="AGE" field="age" align="right" active={sortField === 'age'} onSort={onSort} />
           <th />
         </tr>
       </thead>
@@ -82,18 +69,15 @@ function ColHeader({
   label,
   field,
   align,
-  sortField,
-  sortDir,
+  active,
   onSort,
 }: {
   label: string;
   field?: SortField;
   align?: 'left' | 'right';
-  sortField?: SortField;
-  sortDir?: SortDir;
+  active?: boolean;
   onSort?: (f: SortField) => void;
 }) {
-  const isActive = field && sortField === field;
   const clickable = !!field && !!onSort;
 
   return (
@@ -103,11 +87,9 @@ function ColHeader({
       } ${clickable ? 'cursor-pointer hover:text-text-primary' : ''}`}
       onClick={clickable ? () => onSort!(field!) : undefined}
     >
-      <span className={isActive ? 'text-text-primary' : ''}>
+      <span className={active ? 'text-text-primary' : ''}>
         {label}
-        {isActive && (
-          <span className="ml-0.5 text-[9px]">{sortDir === 'desc' ? '\u25BE' : '\u25B4'}</span>
-        )}
+        {active && <span className="ml-0.5 text-[9px]">{'\u25BE'}</span>}
       </span>
     </th>
   );
@@ -123,84 +105,59 @@ const TableRow = memo(function TableRow({
   onSelect: (id: number | null) => void;
 }) {
   const d = opp.details;
-  const quality = getOppQuality(d);
-  const executable = isExecutable(d);
-  const rawEdge = getRawEdge(d);
+  const quality = getQuality(d);
   const netEdge = getNetEdge(d);
   const profit = getProfit(d);
-  const volume = getVolume(d);
   const liquidity = getLiquidity(d);
 
-  const barColor = qualityBarColor[quality];
+  const barColor = qualityBarColor[quality] || 'transparent';
   const selectedBg = selected
-    ? `rgba(${quality === 'high' ? '63,185,80' : quality === 'medium' ? '210,153,34' : quality === 'low' ? '218,109,37' : '110,118,129'}, 0.05)`
+    ? `rgba(${quality === 'high' ? '63,185,80' : quality === 'medium' ? '210,153,34' : '218,109,37'}, 0.05)`
     : undefined;
 
   return (
     <tr
       className={`h-[32px] border-b border-border cursor-pointer transition-[background-color] duration-150 ${
-        !executable ? 'opacity-40' : ''
-      } ${selected ? '' : 'hover:bg-panel-raised'}`}
+        selected ? '' : 'hover:bg-panel-raised'
+      }`}
       style={{ backgroundColor: selectedBg }}
       onClick={() => onSelect(selected ? null : opp.id)}
     >
-      {/* Quality bar */}
       <td className="p-0 relative">
         <div
           className="absolute inset-y-0 left-0"
-          style={{
-            width: selected ? '2px' : '3px',
-            backgroundColor: barColor,
-          }}
+          style={{ width: '3px', backgroundColor: barColor }}
         />
       </td>
 
-      {/* Type badge */}
       <td className="px-2">
         <TypeBadge type={opp.type} />
       </td>
 
-      {/* Source badges */}
-      <td className="px-2">
-        <SourceBadges type={opp.type} />
+      <td className="px-2 truncate text-[12px] text-text-secondary" title={opp.action_summary}>
+        {opp.action_summary}
       </td>
 
-      {/* Title */}
-      <td className="px-2 truncate text-[13px] text-text-primary">
-        {getTitle(d)}
+      <td className="px-2 text-right font-data tabular text-[12px] font-bold" style={{ color: scoreColor(opp.score) }}>
+        {opp.score > 0 ? opp.score.toFixed(1) : '\u2014'}
       </td>
 
-      {/* Raw Edge */}
-      <td className="px-2 text-right font-data tabular text-[11px] text-text-secondary">
-        {rawEdge.toFixed(2)}%
-      </td>
-
-      {/* Net Edge */}
-      <td className="px-2 text-right font-data tabular text-[13px] font-bold" style={{ color: edgeColor(netEdge) }}>
+      <td className="px-2 text-right font-data tabular text-[12px]" style={{ color: edgeColor(netEdge) }}>
         {netEdge.toFixed(2)}%
       </td>
 
-      {/* Profit */}
       <td className="px-2 text-right font-data tabular text-[11px] text-text-secondary">
         {profit > 0 ? `$${profit.toFixed(2)}` : '\u2014'}
       </td>
 
-      {/* Volume */}
-      <td className="px-2 text-right font-data tabular text-[11px] text-text-secondary">
-        ${fmtNum(volume)}
-      </td>
-
-      {/* Liquidity */}
       <td className="px-2 text-right font-data tabular text-[11px]" style={{ color: liquidity < 2000 ? '#d29922' : '#8b949e' }}>
         ${fmtNum(liquidity)}
       </td>
 
-      {/* Age */}
       <td className="px-2 text-right text-[10px] text-text-tertiary">
         {formatAge(opp.first_seen)}
       </td>
 
-      {/* Link */}
       <td className="px-1 text-center">
         <a
           href={getLinkUrl(opp)}
@@ -217,64 +174,66 @@ const TableRow = memo(function TableRow({
   );
 });
 
+const qualityBarColor: Record<string, string> = {
+  high: '#3fb950',
+  medium: '#d29922',
+  low: '#da6d25',
+  theoretical: 'transparent',
+};
+
 function TypeBadge({ type }: { type: string }) {
   const label = typeLabels[type] || type;
-  const colors: Record<string, string> = {
-    multi_outcome_arb: 'color: #a78bfa; background: rgba(167,139,250,0.15)',
-    tailing: 'color: #fbbf24; background: rgba(251,191,36,0.15)',
-    cross_exchange_arb: 'color: #22d3ee; background: rgba(34,211,238,0.15)',
+  const colors: Record<string, { color: string; bg: string }> = {
+    multi_outcome_arb: { color: '#a78bfa', bg: 'rgba(167,139,250,0.15)' },
+    tailing: { color: '#fbbf24', bg: 'rgba(251,191,36,0.15)' },
+    cross_exchange_arb: { color: '#22d3ee', bg: 'rgba(34,211,238,0.15)' },
   };
+  const c = colors[type] || { color: '#8b949e', bg: 'rgba(139,148,158,0.15)' };
 
   return (
     <span
       className="inline-block px-1 py-px text-[10px] font-semibold tracking-[0.04em] uppercase leading-none"
-      style={{ ...parseStyle(colors[type] || ''), borderRadius: '2px' }}
+      style={{ color: c.color, background: c.bg, borderRadius: '2px' }}
     >
       {label}
     </span>
   );
 }
 
-function SourceBadges({ type }: { type: string }) {
-  if (type === 'cross_exchange_arb') {
-    return (
-      <span className="flex items-center gap-0.5">
-        <span className="text-[10px] font-semibold tracking-[0.04em] text-poly">P</span>
-        <span className="text-text-tertiary text-[10px]">/</span>
-        <span className="text-[10px] font-semibold tracking-[0.04em] text-kalshi">K</span>
-      </span>
-    );
+function getQuality(d: OppDetails): string {
+  if ('quality' in d && d.quality) return d.quality;
+  if (d.type === 'cross_exchange_arb') {
+    if (d.net_profit > 0.02) return 'high';
+    if (d.net_profit > 0) return 'medium';
+    return 'theoretical';
   }
-  if (type === 'tailing' || type === 'multi_outcome_arb') {
-    return (
-      <span className="text-[10px] font-semibold tracking-[0.04em] text-poly">POLY</span>
-    );
-  }
-  return null;
+  return 'theoretical';
 }
 
-function parseStyle(s: string): React.CSSProperties {
-  const obj: any = {};
-  for (const part of s.split(';')) {
-    const [k, v] = part.split(':').map(x => x.trim());
-    if (k && v) {
-      const key = k.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-      obj[key] = v;
-    }
-  }
-  return obj;
+function getNetEdge(d: OppDetails): number {
+  if ('fee_adjusted_edge_pct' in d) return d.fee_adjusted_edge_pct;
+  if (d.type === 'cross_exchange_arb') return d.edge_pct;
+  return 0;
 }
 
-function getTitle(d: OppDetails): string {
-  if (d.type === 'cross_exchange_arb') return d.event_title || d.poly_question || '';
-  if (d.type === 'multi_outcome_arb') return d.event_title;
-  return d.question || d.event_title;
+function getProfit(d: OppDetails): number {
+  if ('est_profit_at_100' in d) return d.est_profit_at_100;
+  if (d.type === 'cross_exchange_arb') return d.net_profit * (100 / d.total_cost);
+  return 0;
 }
 
-function isExecutable(d: OppDetails): boolean {
-  if ('executable' in d) return !!d.executable;
-  if (d.type === 'cross_exchange_arb') return d.net_profit > 0;
-  return false;
+function getLiquidity(d: OppDetails): number {
+  if ('min_liquidity' in d) return d.min_liquidity;
+  if ('liquidity' in d) return d.liquidity;
+  if (d.type === 'cross_exchange_arb') return Math.min(d.poly_liquidity || 0, d.kalshi_liquidity || 0);
+  return 0;
+}
+
+function scoreColor(score: number): string {
+  if (score > 5) return '#3fb950';
+  if (score > 1) return '#56d364';
+  if (score > 0.1) return '#d29922';
+  return '#484f58';
 }
 
 function edgeColor(edge: number): string {
@@ -304,9 +263,6 @@ function formatAge(iso: string): string {
 
 function getLinkUrl(opp: Opportunity): string {
   const d = opp.details;
-  if (d.type === 'cross_exchange_arb') {
-    return `https://polymarket.com/event/${d.poly_event_id}`;
-  }
   if ('slug' in d && d.slug) {
     return `https://polymarket.com/event/${d.slug}`;
   }

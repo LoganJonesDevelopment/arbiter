@@ -1,44 +1,55 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { fetchStats, fetchOpportunities, triggerScan } from './api';
-import type { Stats, Opportunity, Quality } from './api';
+import type { Stats, Opportunity } from './api';
 import { OpportunityTable } from './components/OpportunityTable';
 import { DetailPanel } from './components/DetailPanel';
 
 type TypeFilter = 'all' | 'multi_outcome_arb' | 'tailing' | 'cross_exchange_arb';
-type QualityFilter = 'all' | Quality;
-type SortField = 'net_edge' | 'raw_edge' | 'profit' | 'volume' | 'liquidity' | 'age';
-type SortDir = 'asc' | 'desc';
+export type SortField = 'score' | 'net_edge' | 'profit' | 'liquidity' | 'age';
 
 export default function App() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [total, setTotal] = useState(0);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
-  const [qualityFilter, setQualityFilter] = useState<QualityFilter>('all');
-  const [hideTheoretical, setHideTheoretical] = useState(true);
+  const [executableOnly, setExecutableOnly] = useState(true);
   const [selectedOppId, setSelectedOppId] = useState<number | null>(null);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
-  const [sortField, setSortField] = useState<SortField>('net_edge');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [sortField, setSortField] = useState<SortField>('score');
+  const [page, setPage] = useState(0);
+  const pageSize = 50;
+
+  const sortApiMap: Record<SortField, string> = {
+    score: 'score',
+    net_edge: 'edge',
+    profit: 'score',
+    liquidity: 'score',
+    age: 'last_seen',
+  };
 
   const load = useCallback(async () => {
     try {
       setError(null);
-      const [s, o] = await Promise.all([
+      const [s, resp] = await Promise.all([
         fetchStats(),
         fetchOpportunities({
           type: typeFilter === 'all' ? undefined : typeFilter,
-          limit: 200,
+          sort_by: sortApiMap[sortField],
+          limit: pageSize,
+          offset: page * pageSize,
+          executable_only: executableOnly,
         }),
       ]);
       setStats(s);
-      setOpportunities(o);
+      setOpportunities(resp.items);
+      setTotal(resp.total);
       setLastRefresh(new Date());
     } catch (e: any) {
       setError(e.message || 'Failed to load data');
     }
-  }, [typeFilter]);
+  }, [typeFilter, sortField, page, executableOnly]);
 
   useEffect(() => {
     load();
@@ -47,77 +58,16 @@ export default function App() {
   }, [load]);
 
   useEffect(() => {
+    setPage(0);
+  }, [typeFilter, sortField, executableOnly]);
+
+  useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') setSelectedOppId(null);
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
-
-  const filtered = useMemo(() => {
-    return opportunities.filter((opp) => {
-      const quality = getOppQuality(opp.details);
-      if (hideTheoretical && quality === 'theoretical') return false;
-      if (qualityFilter !== 'all' && quality !== qualityFilter) return false;
-      return true;
-    });
-  }, [opportunities, qualityFilter, hideTheoretical]);
-
-  const sorted = useMemo(() => {
-    const arr = [...filtered];
-    arr.sort((a, b) => {
-      let va: number, vb: number;
-      switch (sortField) {
-        case 'net_edge':
-          va = getNetEdge(a.details);
-          vb = getNetEdge(b.details);
-          break;
-        case 'raw_edge':
-          va = getRawEdge(a.details);
-          vb = getRawEdge(b.details);
-          break;
-        case 'profit':
-          va = getProfit(a.details);
-          vb = getProfit(b.details);
-          break;
-        case 'volume':
-          va = getVolume(a.details);
-          vb = getVolume(b.details);
-          break;
-        case 'liquidity':
-          va = getLiquidity(a.details);
-          vb = getLiquidity(b.details);
-          break;
-        case 'age':
-          va = new Date(a.first_seen + 'Z').getTime();
-          vb = new Date(b.first_seen + 'Z').getTime();
-          break;
-        default:
-          va = getNetEdge(a.details);
-          vb = getNetEdge(b.details);
-      }
-      return sortDir === 'desc' ? vb - va : va - vb;
-    });
-    return arr;
-  }, [filtered, sortField, sortDir]);
-
-  const qualityCounts = useMemo(() => {
-    const counts = { high: 0, medium: 0, low: 0, theoretical: 0 };
-    for (const opp of opportunities) {
-      const q = getOppQuality(opp.details);
-      if (q in counts) counts[q]++;
-    }
-    return counts;
-  }, [opportunities]);
-
-  const typeCounts = useMemo(() => {
-    const counts = { multi_outcome_arb: 0, tailing: 0, cross_exchange_arb: 0 };
-    for (const opp of opportunities) {
-      const t = opp.type as keyof typeof counts;
-      if (t in counts) counts[t]++;
-    }
-    return counts;
-  }, [opportunities]);
 
   const handleScan = async () => {
     setScanning(true);
@@ -130,21 +80,24 @@ export default function App() {
   };
 
   const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDir(sortDir === 'desc' ? 'asc' : 'desc');
-    } else {
-      setSortField(field);
-      setSortDir('desc');
-    }
+    setSortField(field);
+  };
+
+  const handleTypeFilter = (t: TypeFilter) => {
+    setTypeFilter(t);
   };
 
   const selectedOpp = selectedOppId !== null
     ? opportunities.find(o => o.id === selectedOppId) ?? null
     : null;
 
+  const totalPages = Math.ceil(total / pageSize);
+  const showingStart = total > 0 ? page * pageSize + 1 : 0;
+  const showingEnd = Math.min((page + 1) * pageSize, total);
+
   return (
     <div className="h-screen flex flex-col bg-surface text-text-primary font-ui overflow-hidden">
-      {/* Header - 40px */}
+      {/* Header */}
       <header className="h-[40px] shrink-0 border-b border-border flex items-center px-6 justify-between">
         <div className="flex items-center gap-4">
           <div className="flex items-baseline gap-3">
@@ -176,84 +129,44 @@ export default function App() {
         </div>
       </header>
 
-      {/* Stat Bar - 32px */}
-      <div className="h-[32px] shrink-0 border-b border-border flex items-center px-6 gap-4 text-[11px]">
-        <StatChip
-          label="HIGH"
-          count={qualityCounts.high}
-          color="#3fb950"
-          active={qualityFilter === 'high'}
-          onClick={() => setQualityFilter(qualityFilter === 'high' ? 'all' : 'high')}
-        />
-        <span className="text-text-tertiary">|</span>
-        <StatChip
-          label="MED"
-          count={qualityCounts.medium}
-          color="#d29922"
-          active={qualityFilter === 'medium'}
-          onClick={() => setQualityFilter(qualityFilter === 'medium' ? 'all' : 'medium')}
-        />
-        <span className="text-text-tertiary">|</span>
-        <StatChip
-          label="LOW"
-          count={qualityCounts.low}
-          color="#da6d25"
-          active={qualityFilter === 'low'}
-          onClick={() => setQualityFilter(qualityFilter === 'low' ? 'all' : 'low')}
-        />
-        <span className="text-text-tertiary">|</span>
-        <StatChip
-          label="THEO"
-          count={qualityCounts.theoretical}
-          color="#484f58"
-          active={qualityFilter === 'theoretical'}
-          onClick={() => setQualityFilter(qualityFilter === 'theoretical' ? 'all' : 'theoretical')}
-        />
-        {hideTheoretical && qualityCounts.theoretical > 0 && (
-          <span className="text-text-tertiary ml-2">hiding {qualityCounts.theoretical} theoretical</span>
-        )}
-      </div>
-
-      {/* Filter Bar - 32px */}
+      {/* Filter Bar */}
       <div className="h-[32px] shrink-0 border-b border-border flex items-center px-6 justify-between">
         <div className="flex items-center gap-1">
-          <TypeChip
-            label="ALL"
-            count={opportunities.length}
-            active={typeFilter === 'all'}
-            onClick={() => setTypeFilter('all')}
-          />
-          <TypeChip
-            label="MULTI"
-            count={typeCounts.multi_outcome_arb}
-            active={typeFilter === 'multi_outcome_arb'}
-            onClick={() => setTypeFilter('multi_outcome_arb')}
-          />
-          <TypeChip
-            label="TAIL"
-            count={typeCounts.tailing}
-            active={typeFilter === 'tailing'}
-            onClick={() => setTypeFilter('tailing')}
-          />
-          <TypeChip
-            label="CROSS"
-            count={typeCounts.cross_exchange_arb}
-            active={typeFilter === 'cross_exchange_arb'}
-            onClick={() => setTypeFilter('cross_exchange_arb')}
-          />
+          {(['all', 'multi_outcome_arb', 'tailing', 'cross_exchange_arb'] as TypeFilter[]).map((t) => {
+            const label = { all: 'ALL', multi_outcome_arb: 'MULTI', tailing: 'TAIL', cross_exchange_arb: 'CROSS' }[t];
+            const count = t === 'all' ? (stats?.active_opportunities ?? 0)
+              : t === 'multi_outcome_arb' ? (stats?.multi_outcome_opportunities ?? 0)
+              : t === 'tailing' ? (stats?.tailing_opportunities ?? 0)
+              : (stats?.cross_exchange_opportunities ?? 0);
+            return (
+              <button
+                key={t}
+                onClick={() => handleTypeFilter(t)}
+                className={`h-[24px] px-2 text-[11px] font-semibold tracking-[0.04em] cursor-pointer flex items-center gap-1 ${
+                  typeFilter === t
+                    ? 'text-text-primary border-b-2 border-text-primary'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+                style={{ background: 'none', border: typeFilter === t ? undefined : 'none' }}
+              >
+                <span>{label}</span>
+                <span className="font-data tabular text-[10px] text-text-tertiary">{count}</span>
+              </button>
+            );
+          })}
         </div>
         <div className="flex items-center gap-4 text-[11px]">
           <label className="flex items-center gap-1.5 text-text-secondary cursor-pointer select-none">
             <input
               type="checkbox"
-              checked={hideTheoretical}
-              onChange={(e) => setHideTheoretical(e.target.checked)}
+              checked={executableOnly}
+              onChange={(e) => setExecutableOnly(e.target.checked)}
               className="cursor-pointer accent-poly"
             />
-            Hide theoretical
+            Executable only
           </label>
           <span className="text-text-tertiary font-data tabular">
-            {sorted.length}/{opportunities.length}
+            {showingStart}-{showingEnd} of {total}
           </span>
         </div>
       </div>
@@ -266,15 +179,41 @@ export default function App() {
 
       {/* Main content: table + optional detail panel */}
       <div className="flex-1 flex min-h-0">
-        <div className={`${selectedOpp ? 'w-[60%]' : 'w-full'} overflow-auto`}>
-          <OpportunityTable
-            opportunities={sorted}
-            selectedId={selectedOppId}
-            onSelect={setSelectedOppId}
-            sortField={sortField}
-            sortDir={sortDir}
-            onSort={handleSort}
-          />
+        <div className={`${selectedOpp ? 'w-[60%]' : 'w-full'} flex flex-col`}>
+          <div className="flex-1 overflow-auto">
+            <OpportunityTable
+              opportunities={opportunities}
+              selectedId={selectedOppId}
+              onSelect={setSelectedOppId}
+              sortField={sortField}
+              onSort={handleSort}
+            />
+          </div>
+          {totalPages > 1 && (
+            <div className="h-[32px] shrink-0 border-t border-border flex items-center justify-between px-6 text-[11px]">
+              <span className="text-text-secondary font-data tabular">
+                Page {page + 1} of {totalPages}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="px-2 h-[22px] text-text-secondary hover:text-text-primary disabled:text-text-tertiary disabled:cursor-not-allowed cursor-pointer border border-border"
+                  style={{ background: 'none' }}
+                >
+                  Prev
+                </button>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="px-2 h-[22px] text-text-secondary hover:text-text-primary disabled:text-text-tertiary disabled:cursor-not-allowed cursor-pointer border border-border"
+                  style={{ background: 'none' }}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
         {selectedOpp && (
           <div className="w-[40%] border-l border-border overflow-auto bg-panel">
@@ -319,95 +258,6 @@ function StatusIndicator({ lastScan, lastRefresh }: { lastScan: string | null; l
   );
 }
 
-function StatChip({
-  label, count, color, active, onClick,
-}: {
-  label: string;
-  count: number;
-  color: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`cursor-pointer flex items-center gap-1.5 font-semibold tracking-[0.02em] ${
-        active ? 'underline underline-offset-4' : ''
-      }`}
-      style={{ background: 'none', border: 'none', padding: 0 }}
-    >
-      <span style={{ color }}>{label}</span>
-      <span className={`font-data tabular ${active ? 'text-text-primary' : 'text-text-primary'}`}>{count}</span>
-    </button>
-  );
-}
-
-function TypeChip({
-  label, count, active, onClick,
-}: {
-  label: string;
-  count: number;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`h-[24px] px-2 text-[11px] font-semibold tracking-[0.04em] cursor-pointer flex items-center gap-1 ${
-        active
-          ? 'text-text-primary border-b-2 border-text-primary'
-          : 'text-text-secondary hover:text-text-primary'
-      }`}
-      style={{ background: 'none', border: active ? undefined : 'none' }}
-    >
-      <span>{label}</span>
-      <span className="font-data tabular text-[10px] text-text-tertiary">{count}</span>
-    </button>
-  );
-}
-
-function getOppQuality(d: any): Quality {
-  if (d.quality) return d.quality;
-  if (d.type === 'cross_exchange_arb') {
-    if (d.net_profit > 0.02) return 'high';
-    if (d.net_profit > 0) return 'medium';
-    return 'theoretical';
-  }
-  return 'theoretical';
-}
-
-function getRawEdge(d: any): number {
-  if ('raw_edge_pct' in d) return d.raw_edge_pct;
-  if (d.type === 'cross_exchange_arb') return ((d.gross_profit / d.total_cost) * 100);
-  return 0;
-}
-
-function getNetEdge(d: any): number {
-  if ('fee_adjusted_edge_pct' in d) return d.fee_adjusted_edge_pct;
-  if (d.type === 'cross_exchange_arb') return d.edge_pct;
-  return 0;
-}
-
-function getProfit(d: any): number {
-  if ('est_profit_at_100' in d) return d.est_profit_at_100;
-  if (d.type === 'cross_exchange_arb') return d.net_profit * (100 / d.total_cost);
-  return 0;
-}
-
-function getVolume(d: any): number {
-  if ('total_volume' in d) return d.total_volume;
-  if ('volume' in d) return d.volume;
-  if (d.type === 'cross_exchange_arb') return Math.min(d.poly_volume || 0, d.kalshi_volume || 0);
-  return 0;
-}
-
-function getLiquidity(d: any): number {
-  if ('min_liquidity' in d) return d.min_liquidity;
-  if ('liquidity' in d) return d.liquidity;
-  if (d.type === 'cross_exchange_arb') return Math.min(d.poly_liquidity || 0, d.kalshi_liquidity || 0);
-  return 0;
-}
-
 function formatTimeDiff(date: Date): string {
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -418,6 +268,3 @@ function formatTimeDiff(date: Date): string {
   if (diffHrs < 24) return `${diffHrs}h`;
   return `${Math.floor(diffHrs / 24)}d`;
 }
-
-export { getOppQuality, getRawEdge, getNetEdge, getProfit, getVolume, getLiquidity };
-export type { SortField, SortDir };

@@ -14,6 +14,7 @@ export interface Stats {
   polymarket_events: number;
   kalshi_events: number;
   active_opportunities: number;
+  executable_opportunities: number;
   multi_outcome_opportunities: number;
   tailing_opportunities: number;
   cross_exchange_opportunities: number;
@@ -76,8 +77,10 @@ export interface CrossExchangeDetails {
   match_confidence: number;
   market_match_confidence?: number;
   event_title: string;
+  slug: string;
   poly_event_id: string;
   kalshi_event_id: string;
+  kalshi_ticker: string;
   poly_market_id: string;
   kalshi_market_id: string;
   poly_question: string;
@@ -108,10 +111,19 @@ export interface Opportunity {
   event_id: string;
   edge_pct: number;
   details: OppDetails;
+  action_summary: string;
+  score: number;
   markets_involved: string[];
   first_seen: string;
   last_seen: string;
   status: string;
+}
+
+export interface OpportunitiesResponse {
+  items: Opportunity[];
+  total: number;
+  offset: number;
+  limit: number;
 }
 
 export async function fetchStats(): Promise<Stats> {
@@ -123,12 +135,16 @@ export async function fetchOpportunities(params?: {
   status?: string;
   sort_by?: string;
   limit?: number;
-}): Promise<Opportunity[]> {
+  offset?: number;
+  executable_only?: boolean;
+}): Promise<OpportunitiesResponse> {
   const search = new URLSearchParams();
   if (params?.type) search.set('type', params.type);
   if (params?.status) search.set('status', params.status);
   if (params?.sort_by) search.set('sort_by', params.sort_by);
   if (params?.limit) search.set('limit', String(params.limit));
+  if (params?.offset) search.set('offset', String(params.offset));
+  if (params?.executable_only !== undefined) search.set('executable_only', String(params.executable_only));
   return fetchJson(`${BASE}/opportunities?${search}`);
 }
 

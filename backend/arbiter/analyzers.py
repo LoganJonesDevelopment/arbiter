@@ -119,12 +119,31 @@ async def analyze_multi_outcome(session: AsyncSession) -> list[dict]:
         if min_liquidity == float("inf"):
             min_liquidity = 0
 
-        # Determine if this is a real arb vs a coverage gap
         too_many_legs = num_legs > settings.max_practical_legs
         requires_shorting = direction == "overpriced"
 
-        if not is_complete and direction == "underpriced":
-            # Incomplete event — the "edge" is just unlisted-candidate probability
+        # A price sum far from 1.0 means missing outcomes, not a mispricing.
+        # Real arbs are small deviations. Large gaps = untracked outcomes.
+        likely_missing_outcomes = (
+            (direction == "underpriced" and price_sum < 0.90)
+            or (direction == "overpriced" and price_sum > 1.15)
+        )
+
+        if likely_missing_outcomes:
+            executable = False
+            quality = "theoretical"
+            if direction == "underpriced":
+                gap_pct = (1.0 - price_sum) * 100
+                trade_desc = (
+                    f"NOT an arb: {num_legs} tracked outcomes sum to ${price_sum:.4f}. "
+                    f"The {gap_pct:.0f}% gap is untracked outcome probability, not edge."
+                )
+            else:
+                trade_desc = (
+                    f"NOT an arb: {num_legs} outcomes sum to ${price_sum:.4f} "
+                    f"(${price_sum - 1.0:.4f} over). Likely stale or illiquid pricing."
+                )
+        elif not is_complete and direction == "underpriced":
             executable = False
             quality = "theoretical"
             trade_desc = (
@@ -147,7 +166,6 @@ async def analyze_multi_outcome(session: AsyncSession) -> list[dict]:
                 f"Too many legs to practically execute."
             )
         else:
-            # Complete, underpriced, reasonable leg count — potential real arb
             executable = fee_adjusted_edge > 0 and not has_thin_leg
             if executable:
                 quality = (
@@ -292,8 +310,9 @@ async def analyze_tailing(session: AsyncSession) -> list[dict]:
         )
 
         trade_desc = (
-            f"Buy {likely_outcome} @ ${high_price:.4f} (+${settings.fee_rate:.4f} fee), "
-            f"payout $1.00 if {likely_outcome}"
+            f"Buy {likely_outcome} @ ${high_price:.4f} (+${fee:.4f} fee), "
+            f"payout $1.00 if {likely_outcome}. "
+            f"Risk ${high_price:.2f} to make ${profit_per_share:.4f}."
         )
 
         opp = {
