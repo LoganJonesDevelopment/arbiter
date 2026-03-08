@@ -35,6 +35,7 @@ export function OpportunityTable({ opportunities, selectedId, onSelect, sortFiel
         <col style={{ width: '72px' }} />
         <col style={{ width: '72px' }} />
         <col style={{ width: '72px' }} />
+        <col style={{ width: '52px' }} />
         <col style={{ width: '44px' }} />
         <col style={{ width: '28px' }} />
       </colgroup>
@@ -47,6 +48,7 @@ export function OpportunityTable({ opportunities, selectedId, onSelect, sortFiel
           <ColHeader label="NET EDGE" field="net_edge" align="right" active={sortField === 'net_edge'} onSort={onSort} />
           <ColHeader label="PROFIT" field="profit" align="right" active={sortField === 'profit'} onSort={onSort} />
           <ColHeader label="LIQ" field="liquidity" align="right" active={sortField === 'liquidity'} onSort={onSort} />
+          <ColHeader label="RESOLVES" align="right" />
           <ColHeader label="AGE" field="age" align="right" active={sortField === 'age'} onSort={onSort} />
           <th />
         </tr>
@@ -154,6 +156,10 @@ const TableRow = memo(function TableRow({
         ${fmtNum(liquidity)}
       </td>
 
+      <td className="px-2 text-right font-data tabular text-[10px]" style={{ color: resolvesColor(opp.days_to_resolution) }}>
+        {formatDaysToRes(opp.days_to_resolution)}
+      </td>
+
       <td className="px-2 text-right text-[10px] text-text-tertiary">
         {formatAge(opp.first_seen)}
       </td>
@@ -247,6 +253,22 @@ function fmtNum(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
   return n.toFixed(0);
+}
+
+function formatDaysToRes(days: number | null): string {
+  if (days === null || days === undefined) return '\u2014';
+  if (days < 1) return '<1d';
+  if (days < 30) return `${Math.round(days)}d`;
+  if (days < 365) return `${Math.round(days / 30)}mo`;
+  return `${(days / 365).toFixed(1)}y`;
+}
+
+function resolvesColor(days: number | null): string {
+  if (days === null || days === undefined) return '#484f58';
+  if (days <= 7) return '#3fb950';
+  if (days <= 30) return '#d29922';
+  if (days <= 90) return '#8b949e';
+  return '#484f58';
 }
 
 function formatAge(iso: string): string {

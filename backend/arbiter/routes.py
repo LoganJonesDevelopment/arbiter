@@ -103,6 +103,7 @@ async def get_opportunities(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     executable_only: bool = Query(True),
+    max_days: int | None = Query(None, ge=1),
     session: AsyncSession = Depends(get_session),
 ):
     base_filter = [Opportunity.status == status]
@@ -110,6 +111,12 @@ async def get_opportunities(
         base_filter.append(Opportunity.type == type)
     if executable_only:
         base_filter.append(text("json_extract(details, '$.executable') = 1"))
+    if max_days is not None:
+        cutoff = (datetime.now(UTC) + timedelta(days=max_days)).isoformat()
+        base_filter.append(text(
+            f"json_extract(details, '$.end_date') IS NOT NULL "
+            f"AND json_extract(details, '$.end_date') <= '{cutoff}'"
+        ))
 
     total = await session.scalar(
         select(func.count(Opportunity.id)).where(*base_filter)
@@ -129,11 +136,25 @@ async def get_opportunities(
     result = await session.execute(query)
     opps = result.scalars().all()
 
+    now = datetime.now(UTC)
     items = []
     for o in opps:
         details = dict(o.details) if o.details else {}
         details.pop("markets", None)
         score = _actionability_score(details)
+
+        end_date_str = details.get("end_date")
+        days_to_resolution = None
+        if end_date_str:
+            try:
+                end_dt = datetime.fromisoformat(end_date_str.replace("Z", "+00:00"))
+                if end_dt.tzinfo is None:
+                    end_dt = end_dt.replace(tzinfo=UTC)
+                delta = (end_dt - now).total_seconds() / 86400
+                days_to_resolution = max(0, round(delta, 1))
+            except (ValueError, AttributeError):
+                pass
+
         items.append({
             "id": o.id,
             "opp_key": o.opp_key,
@@ -143,6 +164,8 @@ async def get_opportunities(
             "details": details,
             "action_summary": _action_summary(details),
             "score": score,
+            "end_date": end_date_str,
+            "days_to_resolution": days_to_resolution,
             "markets_involved": o.markets_involved,
             "first_seen": o.first_seen.isoformat(),
             "last_seen": o.last_seen.isoformat(),

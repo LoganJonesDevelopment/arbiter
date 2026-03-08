@@ -113,6 +113,8 @@ export interface Opportunity {
   details: OppDetails;
   action_summary: string;
   score: number;
+  end_date: string | null;
+  days_to_resolution: number | null;
   markets_involved: string[];
   first_seen: string;
   last_seen: string;
@@ -137,6 +139,7 @@ export async function fetchOpportunities(params?: {
   limit?: number;
   offset?: number;
   executable_only?: boolean;
+  max_days?: number;
 }): Promise<OpportunitiesResponse> {
   const search = new URLSearchParams();
   if (params?.type) search.set('type', params.type);
@@ -145,6 +148,7 @@ export async function fetchOpportunities(params?: {
   if (params?.limit) search.set('limit', String(params.limit));
   if (params?.offset) search.set('offset', String(params.offset));
   if (params?.executable_only !== undefined) search.set('executable_only', String(params.executable_only));
+  if (params?.max_days) search.set('max_days', String(params.max_days));
   return fetchJson(`${BASE}/opportunities?${search}`);
 }
 

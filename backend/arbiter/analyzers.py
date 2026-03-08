@@ -189,12 +189,20 @@ async def analyze_multi_outcome(session: AsyncSession) -> list[dict]:
 
         market_details.sort(key=lambda m: m["yes_price"], reverse=True)
 
+        end_date = event.end_date
+        if not end_date:
+            for m in active_markets:
+                if m.end_date:
+                    end_date = m.end_date
+                    break
+
         opp = {
             "type": "multi_outcome_arb",
             "event_id": event.id,
             "event_title": event.title,
             "slug": event.slug,
             "category": event.category,
+            "end_date": end_date.isoformat() if end_date else None,
             "direction": direction,
             "num_legs": num_legs,
             "total_markets": len(all_markets),
@@ -315,9 +323,12 @@ async def analyze_tailing(session: AsyncSession) -> list[dict]:
             f"Risk ${high_price:.2f} to make ${profit_per_share:.4f}."
         )
 
+        end_date = market.end_date or (event.end_date if event else None)
+
         opp = {
             "type": "tailing",
             "event_id": market.event_id,
+            "end_date": end_date.isoformat() if end_date else None,
             "event_title": event.title if event else "",
             "slug": event.slug if event else "",
             "category": event.category if event else "",

@@ -13,6 +13,7 @@ export default function App() {
   const [total, setTotal] = useState(0);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [executableOnly, setExecutableOnly] = useState(true);
+  const [maxDays, setMaxDays] = useState<number | undefined>(undefined);
   const [selectedOppId, setSelectedOppId] = useState<number | null>(null);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +41,7 @@ export default function App() {
           limit: pageSize,
           offset: page * pageSize,
           executable_only: executableOnly,
+          max_days: maxDays,
         }),
       ]);
       setStats(s);
@@ -49,7 +51,7 @@ export default function App() {
     } catch (e: any) {
       setError(e.message || 'Failed to load data');
     }
-  }, [typeFilter, sortField, page, executableOnly]);
+  }, [typeFilter, sortField, page, executableOnly, maxDays]);
 
   useEffect(() => {
     load();
@@ -59,7 +61,7 @@ export default function App() {
 
   useEffect(() => {
     setPage(0);
-  }, [typeFilter, sortField, executableOnly]);
+  }, [typeFilter, sortField, executableOnly, maxDays]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -156,6 +158,27 @@ export default function App() {
           })}
         </div>
         <div className="flex items-center gap-4 text-[11px]">
+          <div className="flex items-center gap-1">
+            {([
+              { label: 'ANY', value: undefined },
+              { label: '7D', value: 7 },
+              { label: '30D', value: 30 },
+              { label: '90D', value: 90 },
+            ] as { label: string; value: number | undefined }[]).map((opt) => (
+              <button
+                key={opt.label}
+                onClick={() => setMaxDays(opt.value)}
+                className={`h-[20px] px-1.5 text-[10px] font-semibold tracking-[0.04em] cursor-pointer ${
+                  maxDays === opt.value
+                    ? 'text-text-primary border-b border-text-primary'
+                    : 'text-text-tertiary hover:text-text-secondary'
+                }`}
+                style={{ background: 'none', border: maxDays === opt.value ? undefined : 'none' }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
           <label className="flex items-center gap-1.5 text-text-secondary cursor-pointer select-none">
             <input
               type="checkbox"

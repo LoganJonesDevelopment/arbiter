@@ -348,11 +348,13 @@ def _check_binary_arb(
 
         if net_profit > 0 and edge_pct > best_edge:
             best_edge = edge_pct
+            end_date = poly_market.end_date or (poly_event.end_date if poly_event else None)
             best_arb = {
                 "type": "cross_exchange_arb",
                 "match_confidence": em.confidence,
                 "event_title": poly_event.title if poly_event else "",
                 "slug": poly_event.slug if poly_event else "",
+                "end_date": end_date.isoformat() if end_date else None,
                 "poly_event_id": em.poly_event_id,
                 "kalshi_event_id": em.kalshi_event_id,
                 "kalshi_ticker": kalshi_market.condition_id or "",
