@@ -24,6 +24,14 @@ export interface Stats {
 export type OppType = 'multi_outcome_arb' | 'tailing' | 'cross_exchange_arb';
 export type Quality = 'high' | 'medium' | 'low' | 'theoretical';
 
+export interface MultiOutcomeMarket {
+  market_id: string;
+  question: string;
+  yes_price: number;
+  volume: number;
+  liquidity: number;
+}
+
 export interface MultiOutcomeDetails {
   type: 'multi_outcome_arb';
   event_id: string;
@@ -47,6 +55,7 @@ export interface MultiOutcomeDetails {
   has_thin_leg: boolean;
   quality: Quality;
   executable: boolean;
+  markets: MultiOutcomeMarket[];
 }
 
 export interface TailingDetails {
@@ -85,6 +94,14 @@ export interface CrossExchangeDetails {
   kalshi_market_id: string;
   poly_question: string;
   kalshi_question: string;
+  buy_yes_exchange: string;
+  buy_no_exchange: string;
+  buy_yes_price: number;
+  buy_no_price: number;
+  poly_fee: number;
+  kalshi_fee: number;
+  total_fees: number;
+  max_shares: number;
   strategy: string;
   total_cost: number;
   gross_profit: number;

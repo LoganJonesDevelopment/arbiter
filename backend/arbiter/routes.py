@@ -140,7 +140,6 @@ async def get_opportunities(
     items = []
     for o in opps:
         details = dict(o.details) if o.details else {}
-        details.pop("markets", None)
         score = _actionability_score(details)
 
         end_date_str = details.get("end_date")

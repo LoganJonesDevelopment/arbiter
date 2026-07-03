@@ -1,6 +1,4 @@
-import { useEffect, useState } from 'react';
-import { fetchEventDetail } from '../api';
-import type { Opportunity, EventData, MarketData, MultiOutcomeDetails, TailingDetails, CrossExchangeDetails } from '../api';
+import type { Opportunity, MultiOutcomeDetails, TailingDetails, CrossExchangeDetails } from '../api';
 
 interface Props {
   opportunity: Opportunity;
@@ -9,22 +7,9 @@ interface Props {
 
 export function DetailPanel({ opportunity, onClose }: Props) {
   const d = opportunity.details;
-  const eventId = opportunity.event_id;
-
-  const [event, setEvent] = useState<EventData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setLoading(true);
-    setEvent(null);
-    fetchEventDetail(eventId)
-      .then(setEvent)
-      .finally(() => setLoading(false));
-  }, [eventId]);
 
   return (
     <div className="h-full flex flex-col">
-      {/* Panel header */}
       <div className="h-[40px] shrink-0 border-b border-border flex items-center justify-between px-4">
         <span className="text-[13px] font-semibold text-text-primary truncate mr-2">
           {getTitle(d)}
@@ -38,199 +23,316 @@ export function DetailPanel({ opportunity, onClose }: Props) {
       </div>
 
       <div className="flex-1 overflow-auto p-4">
-        {/* Platform links */}
-        <div className="flex items-center gap-3 mb-4 text-[11px]">
-          {'slug' in d && d.slug && (
-            <a
-              href={`https://polymarket.com/event/${d.slug}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-poly hover:underline"
-            >
-              Polymarket
-            </a>
-          )}
-          {d.type === 'cross_exchange_arb' && (
-            <a
-              href={`https://kalshi.com/markets/${(d as any).kalshi_ticker || ''}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-kalshi hover:underline"
-            >
-              Kalshi
-            </a>
-          )}
-          {event && event.category && (
-            <span className="text-text-tertiary">{event.category}</span>
-          )}
+        {d.type === 'cross_exchange_arb' && <CrossPanel d={d} />}
+        {d.type === 'multi_outcome_arb' && <MultiPanel d={d} />}
+        {d.type === 'tailing' && <TailingPanel d={d} />}
+      </div>
+    </div>
+  );
+}
+
+function CrossPanel({ d }: { d: CrossExchangeDetails }) {
+  const buyYesExchange = d.buy_yes_exchange || 'polymarket';
+  const buyNoExchange = d.buy_no_exchange || 'kalshi';
+  const buyYesPrice = d.buy_yes_price || 0;
+  const buyNoPrice = d.buy_no_price || 0;
+  const polyFee = d.poly_fee || 0;
+  const kalshiFee = d.kalshi_fee || 0;
+  const totalFees = d.total_fees || polyFee + kalshiFee;
+  const maxShares = d.max_shares || 0;
+  const minLiq = Math.min(d.poly_liquidity || 0, d.kalshi_liquidity || 0);
+
+  const polyLink = d.slug ? `https://polymarket.com/event/${d.slug}` : '#';
+  const kalshiLink = d.kalshi_ticker ? `https://kalshi.com/markets/${d.kalshi_ticker}` : '#';
+
+  return (
+    <>
+      {/* Step-by-step execution */}
+      <SectionLabel>Execute this trade</SectionLabel>
+      <div className="space-y-2 mb-4">
+        <StepBox step={1} exchange={exLabel(buyYesExchange)} exchangeColor={exColor(buyYesExchange)}>
+          <span>Buy <span className="text-positive font-semibold">YES</span> at </span>
+          <span className="font-data tabular font-bold text-text-primary">{cents(buyYesPrice)}</span>
+          <div className="text-[10px] text-text-tertiary mt-0.5 truncate" title={buyYesExchange === 'polymarket' ? d.poly_question : d.kalshi_question}>
+            {buyYesExchange === 'polymarket' ? d.poly_question : d.kalshi_question}
+          </div>
+          <a href={buyYesExchange === 'polymarket' ? polyLink : kalshiLink} target="_blank" rel="noopener noreferrer" className="text-[10px] text-text-link hover:underline">
+            Open on {exLabel(buyYesExchange)} &#x2197;
+          </a>
+        </StepBox>
+        <StepBox step={2} exchange={exLabel(buyNoExchange)} exchangeColor={exColor(buyNoExchange)}>
+          <span>Buy <span className="text-negative font-semibold">NO</span> at </span>
+          <span className="font-data tabular font-bold text-text-primary">{cents(buyNoPrice)}</span>
+          <div className="text-[10px] text-text-tertiary mt-0.5 truncate" title={buyNoExchange === 'polymarket' ? d.poly_question : d.kalshi_question}>
+            {buyNoExchange === 'polymarket' ? d.poly_question : d.kalshi_question}
+          </div>
+          <a href={buyNoExchange === 'polymarket' ? polyLink : kalshiLink} target="_blank" rel="noopener noreferrer" className="text-[10px] text-text-link hover:underline">
+            Open on {exLabel(buyNoExchange)} &#x2197;
+          </a>
+        </StepBox>
+        <div className="bg-panel-inset border border-border p-3 text-[11px]">
+          <div className="text-text-tertiary text-[10px] uppercase tracking-[0.02em] mb-1">Step 3: Wait for resolution</div>
+          <div className="text-text-secondary">
+            One side pays out <span className="font-data tabular font-bold text-text-primary">$1.00</span> regardless of outcome.
+            Your cost is <span className="font-data tabular font-bold text-text-primary">{cents(d.total_cost)}</span> per share.
+          </div>
         </div>
+      </div>
 
-        {/* Trade description */}
-        <div className="bg-panel-inset border border-border p-3 mb-4 text-[12px] text-text-secondary leading-relaxed">
-          {getTradeDesc(d)}
+      {/* P&L breakdown */}
+      <SectionLabel>Per-share economics</SectionLabel>
+      <div className="bg-panel-inset border border-border p-3 mb-4 font-data tabular text-[11px]">
+        <div className="space-y-1">
+          <PLRow label={`Buy YES (${exLabel(buyYesExchange)})`} value={cents(buyYesPrice)} />
+          <PLRow label={`Buy NO (${exLabel(buyNoExchange)})`} value={cents(buyNoPrice)} />
+          <PLRow label={`${exLabel('polymarket')} fee`} value={cents(polyFee)} dim />
+          <PLRow label={`${exLabel('kalshi')} fee`} value={cents(kalshiFee)} dim />
+          <div className="border-t border-border my-1" />
+          <PLRow label="Total cost" value={cents(d.total_cost + totalFees)} bold />
+          <PLRow label="Payout" value="$1.00" />
+          <div className="border-t border-border my-1" />
+          <PLRow label="Net profit" value={cents(d.net_profit)} highlight />
+          <PLRow label="Edge" value={`${d.edge_pct.toFixed(2)}%`} highlight />
         </div>
+      </div>
 
-        {/* Opportunity-specific details */}
-        {d.type === 'multi_outcome_arb' && <MultiDetails d={d} />}
-        {d.type === 'tailing' && <TailingDetailSection d={d} />}
-        {d.type === 'cross_exchange_arb' && <CrossDetails d={d} />}
+      {/* Sizing */}
+      <SectionLabel>Position sizing</SectionLabel>
+      <div className="grid grid-cols-2 gap-2 mb-4 text-[11px]">
+        <StatBox label="Min liquidity" value={`$${fmtNum(minLiq)}`} sub="Limits position size" />
+        <StatBox label="Max shares (est)" value={maxShares > 0 ? fmtNum(maxShares) : '—'} sub={maxShares > 0 ? `$${fmtNum(maxShares * d.total_cost)} deployed` : 'Low liquidity'} />
+        <StatBox label="Poly volume" value={`$${fmtNum(d.poly_volume)}`} />
+        <StatBox label="Kalshi volume" value={`$${fmtNum(d.kalshi_volume)}`} />
+      </div>
 
-        {/* Price sum bar for multi-outcome events */}
-        {event && event.markets.length > 1 && (
-          <PriceSumBar markets={event.markets} />
+      {/* Match quality */}
+      <SectionLabel>Match quality</SectionLabel>
+      <div className="bg-panel-inset border border-border p-3 mb-4 text-[11px] space-y-2">
+        <div>
+          <div className="text-text-tertiary text-[10px]">Event match confidence</div>
+          <div className="font-data tabular text-text-primary">{(d.match_confidence * 100).toFixed(0)}%</div>
+        </div>
+        {d.market_match_confidence !== undefined && (
+          <div>
+            <div className="text-text-tertiary text-[10px]">Market match confidence</div>
+            <div className="font-data tabular text-text-primary">{(d.market_match_confidence * 100).toFixed(0)}%</div>
+          </div>
         )}
-
-        {/* Market list */}
-        {loading && (
-          <div className="text-text-tertiary text-[11px] py-4">Loading markets...</div>
+        <div>
+          <div className="text-text-tertiary text-[10px]">Polymarket market</div>
+          <div className="text-text-secondary">{d.poly_question}</div>
+        </div>
+        <div>
+          <div className="text-text-tertiary text-[10px]">Kalshi market</div>
+          <div className="text-text-secondary">{d.kalshi_question}</div>
+        </div>
+        {d.match_confidence < 0.8 && (
+          <div className="text-caution text-[10px] font-semibold">
+            LOW MATCH CONFIDENCE — verify these are the same underlying event before trading
+          </div>
         )}
-        {event && event.markets.length > 0 && (
-          <div className="mt-4">
-            <div className="text-[11px] font-medium uppercase tracking-[0.04em] text-text-secondary mb-2">
-              Markets ({event.markets.length})
-            </div>
+      </div>
+    </>
+  );
+}
+
+function MultiPanel({ d }: { d: MultiOutcomeDetails }) {
+  const markets = d.markets || [];
+  const polyLink = d.slug ? `https://polymarket.com/event/${d.slug}` : '#';
+
+  return (
+    <>
+      {/* What to do */}
+      <SectionLabel>Execute this trade</SectionLabel>
+      <div className="bg-panel-inset border border-border p-3 mb-4 text-[12px] text-text-secondary leading-relaxed">
+        {d.trade_description}
+      </div>
+
+      {d.executable && markets.length > 0 && (
+        <>
+          <SectionLabel>Buy each of these on <a href={polyLink} target="_blank" rel="noopener noreferrer" className="text-poly hover:underline">Polymarket &#x2197;</a></SectionLabel>
+          <div className="mb-4">
             <table className="w-full border-collapse text-[11px]">
               <thead>
                 <tr className="border-b border-border text-text-tertiary">
-                  <th className="text-left py-1 px-1 font-medium">Question</th>
-                  <th className="text-right py-1 px-1 font-medium w-[52px]">YES</th>
-                  <th className="text-right py-1 px-1 font-medium w-[52px]">NO</th>
-                  <th className="text-right py-1 px-1 font-medium w-[60px]">Vol</th>
+                  <th className="text-left py-1 px-1 font-medium">Market</th>
+                  <th className="text-right py-1 px-1 font-medium w-[52px]">Buy YES</th>
                   <th className="text-right py-1 px-1 font-medium w-[52px]">Liq</th>
                 </tr>
               </thead>
               <tbody>
-                {event.markets.map((m) => (
-                  <MarketRow key={m.id} market={m} />
+                {markets.map((m, i) => (
+                  <tr key={m.market_id || i} className="border-b border-border">
+                    <td className="py-1.5 px-1 text-text-primary truncate max-w-0" title={m.question}>
+                      {m.question}
+                    </td>
+                    <td className="py-1.5 px-1 text-right font-data tabular font-bold text-positive">
+                      {(m.yes_price * 100).toFixed(1)}c
+                    </td>
+                    <td className="py-1.5 px-1 text-right font-data tabular text-text-secondary" style={{ color: m.liquidity < 2000 ? '#d29922' : undefined }}>
+                      ${fmtNum(m.liquidity)}
+                    </td>
+                  </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-border">
+                  <td className="py-1.5 px-1 text-text-secondary font-medium">Total</td>
+                  <td className="py-1.5 px-1 text-right font-data tabular font-bold text-text-primary">
+                    {(d.price_sum * 100).toFixed(1)}c
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
             </table>
           </div>
+        </>
+      )}
+
+      {/* P&L */}
+      <SectionLabel>Per-share economics</SectionLabel>
+      <div className="bg-panel-inset border border-border p-3 mb-4 font-data tabular text-[11px]">
+        <div className="space-y-1">
+          <PLRow label={`Buy all ${d.num_legs} YES outcomes`} value={cents(d.price_sum)} />
+          <PLRow label="Fees (Polymarket)" value={cents(d.total_fees)} dim />
+          <div className="border-t border-border my-1" />
+          <PLRow label="Total cost" value={cents(d.price_sum + d.total_fees)} bold />
+          <PLRow label="Guaranteed payout" value="$1.00" />
+          <div className="border-t border-border my-1" />
+          <PLRow label="Profit per share" value={cents(d.profit_per_share)} highlight />
+          <PLRow label="Net edge" value={`${d.fee_adjusted_edge_pct.toFixed(2)}%`} highlight />
+          <PLRow label="Est profit at $100" value={`$${d.est_profit_at_100.toFixed(2)}`} highlight />
+        </div>
+      </div>
+
+      {/* Risks */}
+      <SectionLabel>Risks</SectionLabel>
+      <div className="space-y-1 mb-4 text-[11px] text-text-secondary">
+        {!d.is_complete && (
+          <Risk level="high">{d.inactive_markets} market{d.inactive_markets > 1 ? 's are' : ' is'} unlisted — payout NOT guaranteed if an unlisted outcome wins</Risk>
         )}
+        {d.has_thin_leg && (
+          <Risk level="medium">At least one leg has thin liquidity — may not fill at displayed price</Risk>
+        )}
+        <Risk level="info">Min liquidity across legs: ${fmtNum(d.min_liquidity)}</Risk>
       </div>
-    </div>
+    </>
   );
 }
 
-function MultiDetails({ d }: { d: MultiOutcomeDetails }) {
-  return (
-    <div className="grid grid-cols-3 gap-x-4 gap-y-2 mb-4 text-[11px]">
-      <DataPoint label="Legs" value={`${d.num_legs}/${d.total_markets}`} />
-      <DataPoint label="Price Sum" value={d.price_sum.toFixed(4)} />
-      <DataPoint label="Direction" value={d.direction.toUpperCase()} />
-      <DataPoint label="Raw Edge" value={`${d.raw_edge_pct.toFixed(2)}%`} />
-      <DataPoint label="Net Edge" value={`${d.fee_adjusted_edge_pct.toFixed(2)}%`} highlight />
-      <DataPoint label="Fees" value={`$${d.total_fees.toFixed(4)}`} />
-      <DataPoint label="Volume" value={`$${fmtNum(d.total_volume)}`} />
-      <DataPoint label="Min Liq" value={`$${fmtNum(d.min_liquidity)}`} warn={d.min_liquidity < 2000} />
-      <DataPoint label="Profit/100" value={`$${d.est_profit_at_100.toFixed(2)}`} highlight />
-      {!d.is_complete && (
-        <div className="col-span-3 text-negative text-[10px] font-semibold">
-          {d.inactive_markets} UNLISTED MARKET{d.inactive_markets > 1 ? 'S' : ''}
-        </div>
-      )}
-      {d.has_thin_leg && (
-        <div className="col-span-3 text-caution text-[10px] font-semibold">
-          THIN LIQUIDITY LEG
-        </div>
-      )}
-    </div>
-  );
-}
+function TailingPanel({ d }: { d: TailingDetails }) {
+  const isYes = d.likely_outcome.toLowerCase() === 'yes';
+  const buyPrice = d.price;
+  const riskPerShare = buyPrice;
+  const profitPerShare = d.profit_per_share;
+  const polyLink = d.slug ? `https://polymarket.com/event/${d.slug}` : '#';
 
-function TailingDetailSection({ d }: { d: TailingDetails }) {
   return (
-    <div className="grid grid-cols-3 gap-x-4 gap-y-2 mb-4 text-[11px]">
-      <DataPoint label="Outcome" value={d.likely_outcome} />
-      <DataPoint label="Price" value={`${(d.price * 100).toFixed(1)}c`} />
-      <DataPoint label="Momentum" value={d.momentum.toUpperCase()} />
-      <DataPoint label="Raw Edge" value={`${d.raw_edge_pct.toFixed(2)}%`} />
-      <DataPoint label="Net Edge" value={`${d.fee_adjusted_edge_pct.toFixed(2)}%`} highlight />
-      <DataPoint label="Price Move" value={`${d.price_move > 0 ? '+' : ''}${(d.price_move * 100).toFixed(1)}c`} />
-      <DataPoint label="Volume" value={`$${fmtNum(d.volume)}`} />
-      <DataPoint label="Liquidity" value={`$${fmtNum(d.liquidity)}`} warn={d.liquidity < 2000} />
-      <DataPoint label="Profit/100" value={`$${d.est_profit_at_100.toFixed(2)}`} highlight />
-    </div>
-  );
-}
-
-function CrossDetails({ d }: { d: CrossExchangeDetails }) {
-  return (
-    <div className="mb-4">
-      <div className="grid grid-cols-3 gap-x-4 gap-y-2 text-[11px] mb-3">
-        <DataPoint label="Match" value={`${(d.match_confidence * 100).toFixed(0)}%`} />
-        <DataPoint label="Cost" value={`$${d.total_cost.toFixed(4)}`} />
-        <DataPoint label="Net Profit" value={`$${d.net_profit.toFixed(4)}`} highlight />
-        <DataPoint label="Edge" value={`${d.edge_pct.toFixed(2)}%`} highlight />
-        <DataPoint label="P Vol" value={`$${fmtNum(d.poly_volume)}`} />
-        <DataPoint label="K Vol" value={`$${fmtNum(d.kalshi_volume)}`} />
-      </div>
-      <div className="grid grid-cols-2 gap-2 text-[11px]">
-        <div className="bg-panel-inset border border-border p-2">
-          <div className="text-poly text-[10px] font-semibold mb-1">POLYMARKET</div>
-          <div className="font-data tabular text-text-secondary">
-            YES {(d.poly_yes * 100).toFixed(1)}c &nbsp; NO {(d.poly_no * 100).toFixed(1)}c
-          </div>
+    <>
+      {/* The trade */}
+      <SectionLabel>Execute this trade</SectionLabel>
+      <StepBox step={1} exchange="Polymarket" exchangeColor="#22d3ee">
+        <span>Buy <span className={isYes ? 'text-positive font-semibold' : 'text-negative font-semibold'}>{d.likely_outcome.toUpperCase()}</span> at </span>
+        <span className="font-data tabular font-bold text-text-primary">{cents(buyPrice)}</span>
+        <div className="text-[10px] text-text-tertiary mt-0.5 truncate" title={d.question}>
+          {d.question}
         </div>
-        <div className="bg-panel-inset border border-border p-2">
-          <div className="text-kalshi text-[10px] font-semibold mb-1">KALSHI</div>
-          <div className="font-data tabular text-text-secondary">
-            YES {(d.kalshi_yes * 100).toFixed(1)}c &nbsp; NO {(d.kalshi_no * 100).toFixed(1)}c
-          </div>
+        <a href={polyLink} target="_blank" rel="noopener noreferrer" className="text-[10px] text-text-link hover:underline">
+          Open on Polymarket &#x2197;
+        </a>
+      </StepBox>
+
+      {/* P&L */}
+      <SectionLabel>Per-share economics</SectionLabel>
+      <div className="bg-panel-inset border border-border p-3 mb-4 font-data tabular text-[11px]">
+        <div className="space-y-1">
+          <PLRow label={`Buy ${d.likely_outcome.toUpperCase()}`} value={cents(buyPrice)} />
+          <PLRow label="Fee" value={cents(buyPrice - profitPerShare - (1 - buyPrice) > 0 ? buyPrice + profitPerShare - (1 - buyPrice) : 0)} dim />
+          <div className="border-t border-border my-1" />
+          <PLRow label="Payout if correct" value="$1.00" />
+          <PLRow label="Profit if correct" value={cents(profitPerShare)} highlight />
+          <PLRow label="Net edge" value={`${d.fee_adjusted_edge_pct.toFixed(2)}%`} highlight />
+          <PLRow label="Est profit at $100" value={`$${d.est_profit_at_100.toFixed(2)}`} highlight />
         </div>
       </div>
+
+      {/* Risk */}
+      <SectionLabel>Risk</SectionLabel>
+      <div className="bg-negative/10 border border-negative/30 p-3 mb-4 text-[11px]">
+        <div className="text-negative font-semibold mb-1">If {d.likely_outcome.toUpperCase()} is wrong, you lose {cents(riskPerShare)} per share</div>
+        <div className="text-text-secondary">
+          At $100 deployed: you risk <span className="font-data tabular font-bold text-negative">${(100).toFixed(0)}</span> to make <span className="font-data tabular font-bold text-positive">${d.est_profit_at_100.toFixed(2)}</span>
+        </div>
+        <div className="text-text-tertiary text-[10px] mt-1">
+          This is a directional bet, not an arb. The market is pricing this outcome at {(buyPrice * 100).toFixed(0)}% likely.
+        </div>
+      </div>
+
+      {/* Context */}
+      <SectionLabel>Market context</SectionLabel>
+      <div className="grid grid-cols-2 gap-2 mb-4 text-[11px]">
+        <StatBox label="Momentum" value={d.momentum.toUpperCase()} />
+        <StatBox label="Price move" value={`${d.price_move > 0 ? '+' : ''}${(d.price_move * 100).toFixed(1)}c`} />
+        <StatBox label="Volume" value={`$${fmtNum(d.volume)}`} />
+        <StatBox label="Liquidity" value={`$${fmtNum(d.liquidity)}`} sub={d.liquidity < 2000 ? 'Low — may slip' : undefined} />
+      </div>
+    </>
+  );
+}
+
+
+function StepBox({ step, exchange, exchangeColor, children }: { step: number; exchange: string; exchangeColor: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-panel-inset border border-border p-3 text-[11px]">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-text-tertiary text-[10px] uppercase tracking-[0.02em]">Step {step}</span>
+        <span className="text-[10px] font-semibold uppercase" style={{ color: exchangeColor }}>{exchange}</span>
+      </div>
+      <div className="text-text-secondary">{children}</div>
     </div>
   );
 }
 
-function DataPoint({ label, value, highlight, warn }: { label: string; value: string; highlight?: boolean; warn?: boolean }) {
-  let valueColor = 'text-text-secondary';
-  if (highlight) valueColor = 'text-text-primary';
-  if (warn) valueColor = 'text-caution';
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[10px] font-medium uppercase tracking-[0.04em] text-text-tertiary mb-2 mt-2">
+      {children}
+    </div>
+  );
+}
+
+function PLRow({ label, value, highlight, bold, dim }: { label: string; value: string; highlight?: boolean; bold?: boolean; dim?: boolean }) {
+  let cls = 'text-text-secondary';
+  if (highlight) cls = 'text-positive font-bold';
+  if (bold) cls = 'text-text-primary font-bold';
+  if (dim) cls = 'text-text-tertiary';
 
   return (
-    <div>
+    <div className="flex justify-between">
+      <span className="text-text-secondary">{label}</span>
+      <span className={cls}>{value}</span>
+    </div>
+  );
+}
+
+function StatBox({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="bg-panel-inset border border-border p-2">
       <div className="text-text-tertiary text-[10px] uppercase tracking-[0.02em]">{label}</div>
-      <div className={`font-data tabular ${valueColor}`}>{value}</div>
+      <div className="font-data tabular text-text-primary text-[12px]">{value}</div>
+      {sub && <div className="text-text-tertiary text-[10px] mt-0.5">{sub}</div>}
     </div>
   );
 }
 
-function PriceSumBar({ markets }: { markets: MarketData[] }) {
-  const priceSum = markets.reduce((sum, m) => sum + (m.outcome_prices?.[0] ?? 0), 0);
-  const deviation = priceSum - 1.0;
-
+function Risk({ level, children }: { level: 'high' | 'medium' | 'info'; children: React.ReactNode }) {
+  const styles = {
+    high: 'bg-negative/10 border-negative/30 text-negative',
+    medium: 'bg-caution/10 border-caution/30 text-caution',
+    info: 'bg-panel-inset border-border text-text-secondary',
+  };
   return (
-    <div className="bg-panel-inset border border-border p-3 mt-4">
-      <div className="flex items-baseline justify-between">
-        <span className="text-[10px] text-text-tertiary uppercase tracking-[0.02em]">YES Price Sum</span>
-        <div className="flex items-baseline gap-2">
-          <span className={`text-[16px] font-bold font-data tabular ${
-            Math.abs(deviation) > 0.01 ? 'text-caution' : 'text-positive'
-          }`}>
-            {priceSum.toFixed(4)}
-          </span>
-          <span className={`text-[11px] font-data tabular ${deviation > 0 ? 'text-negative' : 'text-positive'}`}>
-            {deviation >= 0 ? '+' : ''}{(deviation * 100).toFixed(2)}%
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MarketRow({ market }: { market: MarketData }) {
-  const yesPrice = market.outcome_prices?.[0] ?? 0;
-  const noPrice = market.outcome_prices?.[1] ?? 0;
-
-  return (
-    <tr className="border-b border-border hover:bg-panel-raised">
-      <td className="py-1 px-1 text-text-primary truncate max-w-0">{market.question}</td>
-      <td className="py-1 px-1 text-right font-data tabular text-positive">{(yesPrice * 100).toFixed(1)}c</td>
-      <td className="py-1 px-1 text-right font-data tabular text-negative">{(noPrice * 100).toFixed(1)}c</td>
-      <td className="py-1 px-1 text-right font-data tabular text-text-secondary">${fmtNum(market.volume)}</td>
-      <td className="py-1 px-1 text-right font-data tabular text-text-secondary">${fmtNum(market.liquidity)}</td>
-    </tr>
+    <div className={`border p-2 text-[11px] ${styles[level]}`}>{children}</div>
   );
 }
 
@@ -240,10 +342,21 @@ function getTitle(d: any): string {
   return d.question || d.event_title;
 }
 
-function getTradeDesc(d: any): string {
-  if ('trade_description' in d) return d.trade_description;
-  if (d.type === 'cross_exchange_arb') return d.strategy;
-  return '';
+function exLabel(exchange: string): string {
+  if (exchange === 'polymarket') return 'Polymarket';
+  if (exchange === 'kalshi') return 'Kalshi';
+  return exchange;
+}
+
+function exColor(exchange: string): string {
+  if (exchange === 'polymarket') return '#22d3ee';
+  if (exchange === 'kalshi') return '#fbbf24';
+  return '#8b949e';
+}
+
+function cents(n: number): string {
+  if (n >= 1) return `$${n.toFixed(4)}`;
+  return `${(n * 100).toFixed(1)}\u00a2`;
 }
 
 function fmtNum(n: number): string {

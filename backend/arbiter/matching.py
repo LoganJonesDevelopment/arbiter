@@ -349,6 +349,7 @@ def _check_binary_arb(
         if net_profit > 0 and edge_pct > best_edge:
             best_edge = edge_pct
             end_date = poly_market.end_date or (poly_event.end_date if poly_event else None)
+            min_liq = min(poly_market.liquidity or 0, kalshi_market.liquidity or 0)
             best_arb = {
                 "type": "cross_exchange_arb",
                 "match_confidence": em.confidence,
@@ -362,6 +363,14 @@ def _check_binary_arb(
                 "kalshi_market_id": kalshi_market.id,
                 "poly_question": poly_market.question,
                 "kalshi_question": kalshi_market.question,
+                "buy_yes_exchange": buy_yes_src,
+                "buy_no_exchange": buy_no_src,
+                "buy_yes_price": round(buy_yes_price, 4),
+                "buy_no_price": round(buy_no_price, 4),
+                "poly_fee": round(poly_fee_amt, 4),
+                "kalshi_fee": round(kalshi_fee_amt, 4),
+                "total_fees": round(poly_fee_amt + kalshi_fee_amt, 4),
+                "max_shares": int(min_liq / cost) if cost > 0 else 0,
                 "strategy": f"Buy YES on {buy_yes_src} @ ${buy_yes_price:.4f}, "
                            f"Buy NO on {buy_no_src} @ ${buy_no_price:.4f}",
                 "total_cost": round(cost, 4),
