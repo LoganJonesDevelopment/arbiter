@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import type { Opportunity, OppDetails } from '../api';
 import type { SortField } from '../App';
+import { fmtNum, formatRelative } from '../format';
 
 interface Props {
   opportunities: Opportunity[];
@@ -35,7 +36,7 @@ export function OpportunityTable({ opportunities, selectedId, onSelect, sortFiel
         <col style={{ width: '72px' }} />
         <col style={{ width: '72px' }} />
         <col style={{ width: '72px' }} />
-        <col style={{ width: '52px' }} />
+        <col style={{ width: '64px' }} />
         <col style={{ width: '44px' }} />
         <col style={{ width: '28px' }} />
       </colgroup>
@@ -46,8 +47,8 @@ export function OpportunityTable({ opportunities, selectedId, onSelect, sortFiel
           <ColHeader label="ACTION" />
           <ColHeader label="SCORE" field="score" align="right" active={sortField === 'score'} onSort={onSort} />
           <ColHeader label="NET EDGE" field="net_edge" align="right" active={sortField === 'net_edge'} onSort={onSort} />
-          <ColHeader label="PROFIT" field="profit" align="right" active={sortField === 'profit'} onSort={onSort} />
-          <ColHeader label="LIQ" field="liquidity" align="right" active={sortField === 'liquidity'} onSort={onSort} />
+          <ColHeader label="PROFIT" align="right" />
+          <ColHeader label="LIQ" align="right" />
           <ColHeader label="RESOLVES" align="right" />
           <ColHeader label="AGE" field="age" align="right" active={sortField === 'age'} onSort={onSort} />
           <th />
@@ -161,7 +162,7 @@ const TableRow = memo(function TableRow({
       </td>
 
       <td className="px-2 text-right text-[10px] text-text-tertiary">
-        {formatAge(opp.first_seen)}
+        {formatRelative(new Date(opp.first_seen))}
       </td>
 
       <td className="px-1 text-center">
@@ -248,13 +249,6 @@ function edgeColor(edge: number): string {
   return '#f85149';
 }
 
-function fmtNum(n: number): string {
-  if (!n && n !== 0) return '0';
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
-  return n.toFixed(0);
-}
-
 function formatDaysToRes(days: number | null): string {
   if (days === null || days === undefined) return '\u2014';
   if (days < 1) return '<1d';
@@ -269,18 +263,6 @@ function resolvesColor(days: number | null): string {
   if (days <= 30) return '#d29922';
   if (days <= 90) return '#8b949e';
   return '#484f58';
-}
-
-function formatAge(iso: string): string {
-  const d = new Date(iso + 'Z');
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return '<1m';
-  if (diffMin < 60) return `${diffMin}m`;
-  const diffHrs = Math.floor(diffMin / 60);
-  if (diffHrs < 24) return `${diffHrs}h`;
-  return `${Math.floor(diffHrs / 24)}d`;
 }
 
 function getLinkUrl(opp: Opportunity): string {

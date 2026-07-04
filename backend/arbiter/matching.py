@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from datetime import datetime, UTC
@@ -5,7 +6,6 @@ from datetime import datetime, UTC
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from arbiter.config import settings
 from arbiter.fees import polymarket_fee, kalshi_fee
 from arbiter.models import Event, Market, EventMatch, Opportunity
 
@@ -90,6 +90,39 @@ def _market_has_price(m: Market) -> bool:
     return True
 
 
+def _best_event_matches(
+    poly_tokens: list[tuple[Event, set[str]]],
+    kalshi_tokens: list[tuple[Event, set[str]]],
+) -> list[tuple[Event, Event, float]]:
+    token_index: dict[str, list[int]] = {}
+    for idx, (_, kt) in enumerate(kalshi_tokens):
+        for tok in kt:
+            token_index.setdefault(tok, []).append(idx)
+
+    results = []
+    for pe, pt in poly_tokens:
+        if len(pt) < 2:
+            continue
+
+        candidate_ids: set[int] = set()
+        for tok in pt:
+            candidate_ids.update(token_index.get(tok, ()))
+
+        best_score = 0.0
+        best_kalshi = None
+        for idx in sorted(candidate_ids):
+            ke, kt = kalshi_tokens[idx]
+            score = _jaccard(pt, kt)
+            if score > best_score:
+                best_score = score
+                best_kalshi = ke
+
+        if best_score >= MIN_EVENT_MATCH_CONFIDENCE and best_kalshi:
+            results.append((pe, best_kalshi, best_score))
+
+    return results
+
+
 async def match_events(session: AsyncSession) -> list[dict]:
     poly_result = await session.execute(
         select(Event).where(Event.source == "polymarket", Event.active.is_(True))
@@ -108,24 +141,14 @@ async def match_events(session: AsyncSession) -> list[dict]:
     poly_tokens = [(e, _tokenize(e.title)) for e in poly_events]
     kalshi_tokens = [(e, _tokenize(e.title)) for e in kalshi_events]
 
+    loop = asyncio.get_running_loop()
+    best_matches = await loop.run_in_executor(
+        None, _best_event_matches, poly_tokens, kalshi_tokens
+    )
+
     matches = []
 
-    for pe, pt in poly_tokens:
-        if len(pt) < 2:
-            continue
-
-        best_score = 0.0
-        best_kalshi = None
-
-        for ke, kt in kalshi_tokens:
-            score = _jaccard(pt, kt)
-            if score > best_score:
-                best_score = score
-                best_kalshi = ke
-
-        if best_score < MIN_EVENT_MATCH_CONFIDENCE or not best_kalshi:
-            continue
-
+    for pe, best_kalshi, best_score in best_matches:
         existing = await session.execute(
             select(EventMatch).where(
                 EventMatch.poly_event_id == pe.id,
@@ -208,7 +231,7 @@ async def find_cross_exchange_arbs(session: AsyncSession) -> list[dict]:
         kalshi_event = await session.get(Event, em.kalshi_event_id)
 
         if poly_event and kalshi_event and poly_event.neg_risk and kalshi_event.neg_risk:
-            arbs = _find_multi_market_arbs(poly_markets, kalshi_markets, poly_event, kalshi_event, em)
+            arbs = _match_and_check_markets(poly_markets, kalshi_markets, poly_event, kalshi_event, em)
             opportunities.extend(arbs)
         elif len(poly_markets) == 1 and len(kalshi_markets) == 1:
             arb = _check_binary_arb(poly_markets[0], kalshi_markets[0], poly_event, kalshi_event, em)
@@ -277,12 +300,11 @@ def _match_and_check_markets(
         if len(pt) < 2:
             continue
 
-        if not _market_types_compatible(pm.question or "", kalshi_markets[0].question or ""):
-            continue
-
         best_score = 0.0
         best_km = None
         for km, k_desc, kt in kalshi_data:
+            if not _market_types_compatible(pm.question or "", km.question or ""):
+                continue
             if not _numbers_compatible(poly_desc, k_desc):
                 continue
             score = _jaccard(pt, kt)
@@ -396,40 +418,3 @@ def _check_binary_arb(
     return best_arb
 
 
-def _find_multi_market_arbs(
-    poly_markets: list[Market],
-    kalshi_markets: list[Market],
-    poly_event: Event,
-    kalshi_event: Event,
-    em: EventMatch,
-) -> list[dict]:
-    kalshi_descriptors = []
-    for m in kalshi_markets:
-        desc = _outcome_descriptor(m)
-        tokens = _tokenize(desc)
-        kalshi_descriptors.append((m, desc, tokens))
-
-    arbs = []
-    for pm in poly_markets:
-        poly_desc = _outcome_descriptor(pm)
-        pt = _tokenize(poly_desc)
-        if len(pt) < 2:
-            continue
-
-        best_score = 0.0
-        best_km = None
-        for km, k_desc, kt in kalshi_descriptors:
-            if not _numbers_compatible(poly_desc, k_desc):
-                continue
-            score = _jaccard(pt, kt)
-            if score > best_score:
-                best_score = score
-                best_km = km
-
-        if best_score >= MIN_MARKET_MATCH_CONFIDENCE and best_km:
-            arb = _check_binary_arb(pm, best_km, poly_event, kalshi_event, em)
-            if arb:
-                arb["market_match_confidence"] = round(best_score, 4)
-                arbs.append(arb)
-
-    return arbs

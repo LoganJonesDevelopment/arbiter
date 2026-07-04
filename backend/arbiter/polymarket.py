@@ -20,7 +20,6 @@ def _prefixed_id(raw_id: str) -> str:
 class PolymarketCollector:
     def __init__(self):
         self.gamma_url = settings.polymarket_gamma_url
-        self.clob_url = settings.polymarket_clob_url
 
     async def collect(self, session: AsyncSession) -> dict:
         events_count = 0

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, UTC, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,6 +11,16 @@ from arbiter.models import Event, Market, Opportunity, Snapshot
 router = APIRouter(prefix="/api")
 
 QUALITY_RANK = {"high": 0, "medium": 1, "low": 2, "theoretical": 3}
+
+_scan_tasks: set[asyncio.Task] = set()
+
+
+def _iso_utc(dt: datetime | None) -> str | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.isoformat()
 
 
 def _action_summary(details: dict) -> str:
@@ -91,7 +102,7 @@ async def get_stats(session: AsyncSession = Depends(get_session)):
         "multi_outcome_opportunities": multi_opps or 0,
         "tailing_opportunities": tailing_opps or 0,
         "cross_exchange_opportunities": cross_opps or 0,
-        "last_scan": last_snapshot.isoformat() if last_snapshot else None,
+        "last_scan": _iso_utc(last_snapshot),
     }
 
 
@@ -114,9 +125,9 @@ async def get_opportunities(
     if max_days is not None:
         cutoff = (datetime.now(UTC) + timedelta(days=max_days)).isoformat()
         base_filter.append(text(
-            f"json_extract(details, '$.end_date') IS NOT NULL "
-            f"AND json_extract(details, '$.end_date') <= '{cutoff}'"
-        ))
+            "json_extract(details, '$.end_date') IS NOT NULL "
+            "AND json_extract(details, '$.end_date') <= :cutoff"
+        ).bindparams(cutoff=cutoff))
 
     total = await session.scalar(
         select(func.count(Opportunity.id)).where(*base_filter)
@@ -166,8 +177,8 @@ async def get_opportunities(
             "end_date": end_date_str,
             "days_to_resolution": days_to_resolution,
             "markets_involved": o.markets_involved,
-            "first_seen": o.first_seen.isoformat(),
-            "last_seen": o.last_seen.isoformat(),
+            "first_seen": _iso_utc(o.first_seen),
+            "last_seen": _iso_utc(o.last_seen),
             "status": o.status,
         })
 
@@ -179,7 +190,7 @@ async def get_opportunities(
                 QUALITY_RANK.get(x["details"].get("quality", "theoretical"), 3),
                 -x["edge_pct"],
             ))
-        items = items[offset:offset + limit] if sort_by != "score" else items[:limit]
+        items = items[offset:offset + limit]
 
     return {
         "items": items,
@@ -213,7 +224,7 @@ async def get_events(
             "category": e.category,
             "neg_risk": e.neg_risk,
             "markets_count": e.markets_count,
-            "last_updated": e.last_updated.isoformat(),
+            "last_updated": _iso_utc(e.last_updated),
         }
         for e in events
     ]
@@ -276,22 +287,23 @@ async def get_market_history(
             "yes_price": s.yes_price,
             "no_price": s.no_price,
             "volume": s.volume,
-            "timestamp": s.timestamp.isoformat(),
+            "timestamp": _iso_utc(s.timestamp),
         }
         for s in snapshots
     ]
 
 
-@router.post("/scan")
+@router.post("/scan", status_code=202)
 async def trigger_scan():
-    from arbiter.main import scan_lock, run_scan
+    from arbiter.main import scan_lock, scheduled_scan
 
     if scan_lock.locked():
         return {"status": "scan already in progress"}
 
-    async with scan_lock:
-        result = await run_scan()
-        return result
+    task = asyncio.create_task(scheduled_scan())
+    _scan_tasks.add(task)
+    task.add_done_callback(_scan_tasks.discard)
+    return {"status": "scan started"}
 
 
 @router.post("/reanalyze")

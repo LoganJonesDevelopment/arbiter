@@ -5,7 +5,7 @@ Scans Polymarket and Kalshi for arbitrage and mispricing opportunities. Matches 
 
 ## Architecture
 - **Backend:** Python 3.12+, FastAPI, SQLAlchemy + SQLite (WAL mode), httpx, APScheduler
-- **Frontend:** React 18, Vite, TypeScript, Tailwind CSS v4
+- **Frontend:** React 19, Vite, TypeScript, Tailwind CSS v4
 - **Deployment:** Docker Compose (backend :8890, frontend :8889)
 - **Data sources:** Polymarket Gamma API, Kalshi Events API (both no auth for reads)
 

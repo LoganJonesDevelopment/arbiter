@@ -1,11 +1,18 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { fetchStats, fetchOpportunities, triggerScan } from './api';
 import type { Stats, Opportunity } from './api';
 import { OpportunityTable } from './components/OpportunityTable';
 import { DetailPanel } from './components/DetailPanel';
+import { formatRelative } from './format';
 
 type TypeFilter = 'all' | 'multi_outcome_arb' | 'tailing' | 'cross_exchange_arb';
-export type SortField = 'score' | 'net_edge' | 'profit' | 'liquidity' | 'age';
+export type SortField = 'score' | 'net_edge' | 'age';
+
+const sortApiMap: Record<SortField, string> = {
+  score: 'score',
+  net_edge: 'edge',
+  age: 'first_seen',
+};
 
 export default function App() {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -21,20 +28,16 @@ export default function App() {
   const [sortField, setSortField] = useState<SortField>('score');
   const [page, setPage] = useState(0);
   const pageSize = 50;
-
-  const sortApiMap: Record<SortField, string> = {
-    score: 'score',
-    net_edge: 'edge',
-    profit: 'score',
-    liquidity: 'score',
-    age: 'last_seen',
-  };
+  const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       setError(null);
       const [s, resp] = await Promise.all([
-        fetchStats(),
+        fetchStats(controller.signal),
         fetchOpportunities({
           type: typeFilter === 'all' ? undefined : typeFilter,
           sort_by: sortApiMap[sortField],
@@ -42,14 +45,15 @@ export default function App() {
           offset: page * pageSize,
           executable_only: executableOnly,
           max_days: maxDays,
-        }),
+        }, controller.signal),
       ]);
       setStats(s);
       setOpportunities(resp.items);
       setTotal(resp.total);
       setLastRefresh(new Date());
-    } catch (e: any) {
-      setError(e.message || 'Failed to load data');
+    } catch (e: unknown) {
+      if (e instanceof DOMException && e.name === 'AbortError') return;
+      setError(e instanceof Error ? e.message : 'Failed to load data');
     }
   }, [typeFilter, sortField, page, executableOnly, maxDays]);
 
@@ -76,6 +80,8 @@ export default function App() {
     try {
       await triggerScan();
       await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Scan failed');
     } finally {
       setScanning(false);
     }
@@ -252,18 +258,18 @@ export default function App() {
 }
 
 function StatusIndicator({ lastScan, lastRefresh }: { lastScan: string | null; lastRefresh: Date }) {
-  const [, setTick] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    const interval = setInterval(() => setTick(t => t + 1), 10_000);
+    const interval = setInterval(() => setNow(Date.now()), 10_000);
     return () => clearInterval(interval);
   }, []);
 
-  const scanDate = lastScan ? new Date(lastScan + 'Z') : null;
-  const scanAge = scanDate ? formatTimeDiff(scanDate) : null;
-  const refreshAge = formatTimeDiff(lastRefresh);
+  const scanDate = lastScan ? new Date(lastScan) : null;
+  const scanAge = scanDate ? formatRelative(scanDate, now) : null;
+  const refreshAge = formatRelative(lastRefresh, now);
 
-  const scanMinutes = scanDate ? (Date.now() - scanDate.getTime()) / 60000 : Infinity;
+  const scanMinutes = scanDate ? (now - scanDate.getTime()) / 60000 : Infinity;
   const dotColor = scanMinutes < 10 ? 'bg-positive' : scanMinutes < 30 ? 'bg-caution' : 'bg-negative';
   const doPulse = scanMinutes < 10;
 
@@ -279,15 +285,4 @@ function StatusIndicator({ lastScan, lastRefresh }: { lastScan: string | null; l
       <span>refresh {refreshAge}</span>
     </div>
   );
-}
-
-function formatTimeDiff(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return '<1m';
-  if (diffMin < 60) return `${diffMin}m`;
-  const diffHrs = Math.floor(diffMin / 60);
-  if (diffHrs < 24) return `${diffHrs}h`;
-  return `${Math.floor(diffHrs / 24)}d`;
 }

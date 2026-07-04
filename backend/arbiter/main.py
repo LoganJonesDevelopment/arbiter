@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 scheduler = AsyncIOScheduler()
 scan_lock = asyncio.Lock()
+startup_scan_task: asyncio.Task | None = None
 
 
 async def prune_snapshots(session):
@@ -76,10 +77,11 @@ async def scheduled_scan():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global startup_scan_task
     await init_db()
     logger.info("Database initialized")
 
-    asyncio.create_task(scheduled_scan())
+    startup_scan_task = asyncio.create_task(scheduled_scan())
 
     scheduler.add_job(
         scheduled_scan,

@@ -4,7 +4,6 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./arbiter.db"
     polymarket_gamma_url: str = "https://gamma-api.polymarket.com"
-    polymarket_clob_url: str = "https://clob.polymarket.com"
     kalshi_api_url: str = "https://api.elections.kalshi.com/trade-api/v2"
     collection_interval_minutes: int = 5
     min_edge_pct: float = 0.5

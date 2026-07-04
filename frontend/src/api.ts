@@ -145,8 +145,8 @@ export interface OpportunitiesResponse {
   limit: number;
 }
 
-export async function fetchStats(): Promise<Stats> {
-  return fetchJson(`${BASE}/stats`);
+export async function fetchStats(signal?: AbortSignal): Promise<Stats> {
+  return fetchJson(`${BASE}/stats`, { signal });
 }
 
 export async function fetchOpportunities(params?: {
@@ -157,7 +157,7 @@ export async function fetchOpportunities(params?: {
   offset?: number;
   executable_only?: boolean;
   max_days?: number;
-}): Promise<OpportunitiesResponse> {
+}, signal?: AbortSignal): Promise<OpportunitiesResponse> {
   const search = new URLSearchParams();
   if (params?.type) search.set('type', params.type);
   if (params?.status) search.set('status', params.status);
@@ -166,7 +166,7 @@ export async function fetchOpportunities(params?: {
   if (params?.offset) search.set('offset', String(params.offset));
   if (params?.executable_only !== undefined) search.set('executable_only', String(params.executable_only));
   if (params?.max_days) search.set('max_days', String(params.max_days));
-  return fetchJson(`${BASE}/opportunities?${search}`);
+  return fetchJson(`${BASE}/opportunities?${search}`, { signal });
 }
 
 export interface MarketData {

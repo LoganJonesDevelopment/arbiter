@@ -39,14 +39,15 @@ Single-exchange multi-outcome arbs on Polymarket are effectively nonexistent:
 - Complete events are always overpriced (sum > 1.0, requires shorting)
 - Tailing (buying near-certain outcomes) is the only actionable single-exchange play
 
-## Phase 3 — Cross-Market Arbitrage
-Priority: the highest-value feature. Same event priced differently on two platforms = guaranteed profit.
+## Phase 3 — Cross-Market Arbitrage (DONE)
+Same event priced differently on two platforms = guaranteed profit.
 
-- [ ] Kalshi API integration
-- [ ] Market matching (title similarity + date matching)
-- [ ] Cross-platform arb detector
+- [x] Kalshi API integration
+- [x] Market matching (title similarity + number compatibility)
+- [x] Cross-platform arb detector
+- [x] Fee-adjusted cross-platform P&L
+- [x] Low-confidence match warnings in the detail panel
 - [ ] Resolution risk warnings (different resolution criteria)
-- [ ] Fee-adjusted cross-platform P&L
 
 ## Phase 4 — Correlated Market Intelligence
 - [ ] Related market clustering
@@ -62,7 +63,8 @@ Priority: the highest-value feature. Same event priced differently on two platfo
 - [ ] Whale tracking
 
 ## Phase 6 — Infrastructure
-- [ ] Docker Compose
+- [x] Docker Compose
+- [x] GitHub Actions CI (frontend lint + build, backend compile check)
 - [ ] WebSocket real-time feed
 - [ ] Notification system
 - [ ] Historical analytics / backtesting

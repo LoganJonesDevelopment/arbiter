@@ -95,7 +95,7 @@ font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', ui-monospace, monos
 
 Inter + JetBrains Mono is the pairing to use. They share nearly identical x-heights, so they sit together naturally. Inter has OpenType tabular figures for inline numbers. JetBrains Mono makes numerical columns scannable because every digit occupies the same width — `$1,111.11` and `$999.99` visually align.
 
-**Do not use a single monospace font for everything.** The current codebase uses monospace for all text. This hurts readability on titles and descriptions — monospace fonts are wider and slower to read for prose. Use monospace exclusively for data.
+**Do not use a single monospace font for everything.** Monospace hurts readability on titles and descriptions — monospace fonts are wider and slower to read for prose. Use monospace exclusively for data.
 
 ### Type Scale
 
@@ -161,15 +161,11 @@ Use a 4px base grid. All spacing should be multiples of 4px.
 
 The header, stat bar, and filter bar should be fixed/sticky. Combined height: ~104px. The remaining viewport is 100% data table. On a 1080p display, that's ~970px of data. At 32px row height, that's ~30 visible rows without scrolling.
 
-### Current Layout Problems
-
-The existing UI uses stacked cards with internal padding of 12px, rounded corners, and vertical spacing between cards of 8px. Each opportunity card is ~120px tall. On a 1080p display, you see ~8 opportunities. A table with 32px rows would show 30 — nearly 4x the density.
-
 ---
 
 ## 5. Data Table Design
 
-This is the highest-impact change. Switch from cards to a proper data table.
+The main view is a dense data table, not cards.
 
 ### Row Structure
 
@@ -220,13 +216,13 @@ Tables are good when:
 - Density matters
 - Desktop only
 
-Arbiter is the second case. The current card layout forces your eyes to hunt for the edge value in each card individually. A table puts all edges in a single column, scannable in a glance.
+Arbiter is the second case. A card layout forces your eyes to hunt for the edge value in each card individually. A table puts all edges in a single column, scannable in a glance.
 
 ---
 
-## 6. Stat Bar (replacing the 4-card grid)
+## 6. Stat Bar
 
-The current 4-card quality count display takes ~80px of vertical space. Replace with an inline chip bar:
+Quality counts render as an inline chip bar, not a card grid:
 
 ```
 HIGH 3  |  MED 12  |  LOW 8  |  THEO 45  ·  hiding 45 theoretical
@@ -235,7 +231,6 @@ HIGH 3  |  MED 12  |  LOW 8  |  THEO 45  ·  hiding 45 theoretical
 - Each chip: text-only, no background, no border. Just the label in the quality color + the count in primary text.
 - Active filter: underline + slightly brighter text.
 - Total height: 32px (single line).
-- Saves ~48px of vertical space vs the current card grid.
 
 ---
 
@@ -338,11 +333,11 @@ This is desktop-only, but handle different desktop widths:
 
 ## 13. Implementation Notes (React + Tailwind)
 
-### Tailwind Config Updates
+### Tailwind Config
 
-Replace the current `@theme` block with the expanded palette above. Add the Inter + JetBrains Mono font stack.
+The `@theme` block in `index.css` defines the palette above plus the Inter + JetBrains Mono font stack.
 
-### Key CSS Utilities to Define
+### Key CSS Utilities
 
 ```css
 .font-data { font-family: 'JetBrains Mono', monospace; }
@@ -363,17 +358,6 @@ App
       TableRow (virtualized)
     DetailPanel (right, conditional)
 ```
-
-### Migration Path from Current UI
-
-1. Add Inter + JetBrains Mono fonts (Google Fonts or self-hosted)
-2. Update color tokens in `index.css`
-3. Replace `OpportunityTable` card layout with actual `<table>` or CSS grid table
-4. Collapse StatCard grid into inline StatBar
-5. Add column header sorting
-6. Add split-view detail panel
-7. Add keyboard navigation
-8. Add virtualized scrolling if needed
 
 ---
 

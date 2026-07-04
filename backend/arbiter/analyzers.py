@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, UTC, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from arbiter.config import settings
@@ -43,16 +43,22 @@ async def analyze_multi_outcome(session: AsyncSession) -> list[dict]:
     )
     events = result.scalars().all()
 
+    markets_result = await session.execute(
+        select(Market).join(Event, Market.event_id == Event.id).where(
+            Event.active.is_(True),
+            Event.markets_count > 1,
+            Event.neg_risk.is_(True),
+        )
+    )
+    markets_by_event: dict[str, list[Market]] = {}
+    for m in markets_result.scalars().all():
+        markets_by_event.setdefault(m.event_id, []).append(m)
+
     opportunities = []
 
     for event in events:
-        # Get ALL markets for this event (active + inactive)
-        all_result = await session.execute(
-            select(Market).where(Market.event_id == event.id)
-        )
-        all_markets = all_result.scalars().all()
+        all_markets = markets_by_event.get(event.id, [])
 
-        # Separate active (with prices) from inactive/placeholder
         active_markets = []
         inactive_count = 0
         for m in all_markets:
@@ -240,46 +246,56 @@ async def analyze_tailing(session: AsyncSession) -> list[dict]:
         select(Market).where(
             Market.active.is_(True),
             Market.closed.is_(False),
+            Market.volume >= settings.min_volume,
+            Market.liquidity >= settings.min_liquidity_per_leg,
         )
     )
     markets = result.scalars().all()
 
     recent_cutoff = datetime.now(UTC) - timedelta(minutes=30)
 
-    event_ids = {m.event_id for m in markets}
-    event_result = await session.execute(select(Event).where(Event.id.in_(event_ids)))
-    events_by_id = {e.id: e for e in event_result.scalars().all()}
-
-    opportunities = []
-
+    candidates = []
     for market in markets:
         if not market.outcome_prices or len(market.outcome_prices) < 2:
             continue
-
-        yes_price = market.outcome_prices[0]
-        no_price = market.outcome_prices[1]
-
-        high_price = max(yes_price, no_price)
+        high_price = max(market.outcome_prices[0], market.outcome_prices[1])
         if high_price < threshold or high_price >= 0.99:
             continue
+        candidates.append(market)
 
-        if (market.volume or 0) < settings.min_volume:
-            continue
+    if not candidates:
+        return []
 
-        if (market.liquidity or 0) < settings.min_liquidity_per_leg:
-            continue
+    event_ids = {m.event_id for m in candidates}
+    event_result = await session.execute(select(Event).where(Event.id.in_(event_ids)))
+    events_by_id = {e.id: e for e in event_result.scalars().all()}
 
-        # Check momentum
-        prev_snapshot = await session.execute(
-            select(Snapshot)
-            .where(
-                Snapshot.market_id == market.id,
-                Snapshot.timestamp < recent_cutoff,
-            )
-            .order_by(Snapshot.timestamp.desc())
-            .limit(1)
+    latest_snapshot = (
+        select(Snapshot.market_id, func.max(Snapshot.timestamp).label("ts"))
+        .where(
+            Snapshot.market_id.in_([m.id for m in candidates]),
+            Snapshot.timestamp < recent_cutoff,
         )
-        prev = prev_snapshot.scalar_one_or_none()
+        .group_by(Snapshot.market_id)
+        .subquery()
+    )
+    snapshot_result = await session.execute(
+        select(Snapshot).join(
+            latest_snapshot,
+            (Snapshot.market_id == latest_snapshot.c.market_id)
+            & (Snapshot.timestamp == latest_snapshot.c.ts),
+        )
+    )
+    prev_by_market = {s.market_id: s for s in snapshot_result.scalars().all()}
+
+    opportunities = []
+
+    for market in candidates:
+        yes_price = market.outcome_prices[0]
+        no_price = market.outcome_prices[1]
+        high_price = max(yes_price, no_price)
+
+        prev = prev_by_market.get(market.id)
 
         price_move = 0.0
         momentum = "stable"

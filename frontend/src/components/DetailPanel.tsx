@@ -1,4 +1,5 @@
-import type { Opportunity, MultiOutcomeDetails, TailingDetails, CrossExchangeDetails } from '../api';
+import type { Opportunity, OppDetails, MultiOutcomeDetails, TailingDetails, CrossExchangeDetails } from '../api';
+import { cents, fmtNum } from '../format';
 
 interface Props {
   opportunity: Opportunity;
@@ -247,7 +248,7 @@ function TailingPanel({ d }: { d: TailingDetails }) {
       <div className="bg-panel-inset border border-border p-3 mb-4 font-data tabular text-[11px]">
         <div className="space-y-1">
           <PLRow label={`Buy ${d.likely_outcome.toUpperCase()}`} value={cents(buyPrice)} />
-          <PLRow label="Fee" value={cents(buyPrice - profitPerShare - (1 - buyPrice) > 0 ? buyPrice + profitPerShare - (1 - buyPrice) : 0)} dim />
+          <PLRow label="Fee" value={cents(Math.max(0, 1 - buyPrice - profitPerShare))} dim />
           <div className="border-t border-border my-1" />
           <PLRow label="Payout if correct" value="$1.00" />
           <PLRow label="Profit if correct" value={cents(profitPerShare)} highlight />
@@ -336,7 +337,7 @@ function Risk({ level, children }: { level: 'high' | 'medium' | 'info'; children
   );
 }
 
-function getTitle(d: any): string {
+function getTitle(d: OppDetails): string {
   if (d.type === 'cross_exchange_arb') return d.event_title || d.poly_question || '';
   if (d.type === 'multi_outcome_arb') return d.event_title;
   return d.question || d.event_title;
@@ -354,14 +355,3 @@ function exColor(exchange: string): string {
   return '#8b949e';
 }
 
-function cents(n: number): string {
-  if (n >= 1) return `$${n.toFixed(4)}`;
-  return `${(n * 100).toFixed(1)}\u00a2`;
-}
-
-function fmtNum(n: number): string {
-  if (!n && n !== 0) return '0';
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
-  return n.toFixed(0);
-}
