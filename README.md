@@ -25,4 +25,4 @@ For development, the backend runs with uvicorn from `backend/` (`uvicorn arbiter
 
 ## Screenshots
 
-<!-- screenshots go here -->
+![Scanner](docs/screenshots/scanner.png)
