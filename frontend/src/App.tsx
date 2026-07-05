@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { fetchStats, fetchOpportunities, triggerScan } from './api';
+import { fetchStats, fetchOpportunities, triggerScan, DEMO_MODE } from './api';
 import type { Stats, Opportunity } from './api';
 import { OpportunityTable } from './components/OpportunityTable';
 import { DetailPanel } from './components/DetailPanel';
@@ -59,6 +59,7 @@ export default function App() {
 
   useEffect(() => {
     load();
+    if (DEMO_MODE) return;
     const interval = setInterval(load, 30_000);
     return () => clearInterval(interval);
   }, [load]);
@@ -125,17 +126,24 @@ export default function App() {
           <StatusIndicator lastScan={stats?.last_scan ?? null} lastRefresh={lastRefresh} />
           <button
             onClick={handleScan}
-            disabled={scanning}
+            disabled={scanning || DEMO_MODE}
+            title={DEMO_MODE ? 'Scanning is disabled in the demo' : undefined}
             className={`h-[24px] px-3 text-[10px] font-semibold uppercase tracking-[0.04em] cursor-pointer border ${
-              scanning
+              scanning || DEMO_MODE
                 ? 'border-border text-text-tertiary cursor-not-allowed'
                 : 'border-accent text-text-secondary hover:text-text-primary hover:border-text-secondary'
             }`}
           >
-            {scanning ? 'SCANNING...' : 'SCAN'}
+            {DEMO_MODE ? 'SCAN OFF' : scanning ? 'SCANNING...' : 'SCAN'}
           </button>
         </div>
       </header>
+
+      {DEMO_MODE && (
+        <div className="shrink-0 border-b border-caution/40 bg-caution/10 px-6 py-1 text-[11px] text-caution font-data tabular">
+          DEMO — data frozen {stats?.last_scan ? new Date(stats.last_scan).toISOString().slice(0, 10) : ''} · live scanner runs on a home server
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="h-[32px] shrink-0 border-b border-border flex items-center px-6 justify-between">
@@ -164,7 +172,7 @@ export default function App() {
           })}
         </div>
         <div className="flex items-center gap-4 text-[11px]">
-          <div className="flex items-center gap-1">
+          {!DEMO_MODE && <div className="flex items-center gap-1">
             {([
               { label: 'ANY', value: undefined },
               { label: '7D', value: 7 },
@@ -184,7 +192,7 @@ export default function App() {
                 {opt.label}
               </button>
             ))}
-          </div>
+          </div>}
           <label className="flex items-center gap-1.5 text-text-secondary cursor-pointer select-none">
             <input
               type="checkbox"
@@ -270,8 +278,8 @@ function StatusIndicator({ lastScan, lastRefresh }: { lastScan: string | null; l
   const refreshAge = formatRelative(lastRefresh, now);
 
   const scanMinutes = scanDate ? (now - scanDate.getTime()) / 60000 : Infinity;
-  const dotColor = scanMinutes < 10 ? 'bg-positive' : scanMinutes < 30 ? 'bg-caution' : 'bg-negative';
-  const doPulse = scanMinutes < 10;
+  const dotColor = DEMO_MODE ? 'bg-accent' : scanMinutes < 10 ? 'bg-positive' : scanMinutes < 30 ? 'bg-caution' : 'bg-negative';
+  const doPulse = !DEMO_MODE && scanMinutes < 10;
 
   return (
     <div className="flex items-center gap-3 text-[10px] text-text-secondary tabular">

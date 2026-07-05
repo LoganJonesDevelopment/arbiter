@@ -1,5 +1,15 @@
 const BASE = '/api';
 
+export const DEMO_MODE = !!import.meta.env.VITE_DEMO;
+
+type DemoData = typeof import('./demo/data');
+let demoDataPromise: Promise<DemoData> | null = null;
+
+function demoData(): Promise<DemoData> {
+  demoDataPromise ??= import('./demo/data');
+  return demoDataPromise;
+}
+
 async function fetchJson(url: string, init?: RequestInit) {
   const res = await fetch(url, init);
   if (!res.ok) {
@@ -146,6 +156,9 @@ export interface OpportunitiesResponse {
 }
 
 export async function fetchStats(signal?: AbortSignal): Promise<Stats> {
+  if (DEMO_MODE) {
+    return (await demoData()).getStats();
+  }
   return fetchJson(`${BASE}/stats`, { signal });
 }
 
@@ -158,6 +171,9 @@ export async function fetchOpportunities(params?: {
   executable_only?: boolean;
   max_days?: number;
 }, signal?: AbortSignal): Promise<OpportunitiesResponse> {
+  if (DEMO_MODE) {
+    return (await demoData()).queryOpportunities(params);
+  }
   const search = new URLSearchParams();
   if (params?.type) search.set('type', params.type);
   if (params?.status) search.set('status', params.status);
@@ -199,5 +215,8 @@ export async function fetchMarketHistory(marketId: string, hours = 24) {
 }
 
 export async function triggerScan() {
+  if (DEMO_MODE) {
+    return (await demoData()).scanResponse();
+  }
   return fetchJson(`${BASE}/scan`, { method: 'POST' });
 }
