@@ -141,7 +141,8 @@ export default function App() {
 
       {DEMO_MODE && (
         <div className="shrink-0 border-b border-caution/40 bg-caution/10 px-6 py-1 text-[11px] text-caution font-data tabular">
-          DEMO — data frozen {stats?.last_scan ? new Date(stats.last_scan).toISOString().slice(0, 10) : ''} · live scanner runs on a home server
+          DEMO — data frozen {stats?.last_scan ? new Date(stats.last_scan).toISOString().slice(0, 10) : ''} · live scanner runs on a home server · by{' '}
+          <a href="https://loganjones.vercel.app" className="underline hover:opacity-80">Logan Jones</a>
         </div>
       )}
 
