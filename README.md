@@ -1,5 +1,7 @@
 # Arbiter
 
+Live demo: [arbiter-demo.vercel.app](https://arbiter-demo.vercel.app) · Case study: [loganjones.dev/work/arbiter](https://loganjones.dev/work/arbiter/)
+
 Prediction-market opportunity scanner. Collects events and markets from Polymarket and Kalshi on a schedule, matches the same real-world events across the two exchanges, and surfaces three kinds of opportunities: multi-outcome arbs (an event whose YES prices don't sum to 1.00), tailing plays (near-certain outcomes above 95% with remaining edge), and cross-exchange arbs (the same event priced differently on each exchange). Every opportunity is fee-adjusted using each exchange's actual fee model and tagged with a quality tier (high, medium, low, theoretical) based on edge and liquidity, so untradeable results — missing outcomes, positions that require shorting, too many legs, thin books — are labeled instead of hidden.
 
 ## Architecture
