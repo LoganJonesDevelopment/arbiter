@@ -2,7 +2,9 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8890:8888"
+      # LAN + loopback only — the tailscale IP stays free for tailscale serve (HTTPS)
+      - "192.168.0.21:8890:8888"
+      - "127.0.0.1:8890:8888"
     volumes:
       - backend-data:/app/data
     environment:
@@ -12,7 +14,9 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "8889:80"
+      # LAN + loopback only — the tailscale IP stays free for tailscale serve (HTTPS)
+      - "192.168.0.21:8889:80"
+      - "127.0.0.1:8889:80"
     depends_on:
       - backend
     restart: unless-stopped
