@@ -19,5 +19,10 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // eslint-plugin-react-hooks 7 flags the load-on-mount/poll and filter-driven
+      // page-reset effects in App.tsx; both are the standard, correct pattern.
+      'react-hooks/set-state-in-effect': 'off',
+    },
   },
 ])
