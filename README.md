@@ -23,7 +23,7 @@ docker compose up -d --build
 - Frontend: http://localhost:8889
 - Backend API: http://localhost:8890/api
 
-For development, the backend runs with uvicorn from `backend/` (`uvicorn arbiter.main:app --port 8888`) and the frontend with `npm run dev` from `frontend/`.
+For collection-free local development and regression checks, see [Safe iteration](docs/TESTING.md). The disposable API command binds loopback, uses an in-memory database, and disables startup, scheduled, and manual collection. The Compose command above remains the collecting deployment path.
 
 ## Screenshots
 

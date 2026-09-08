@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./arbiter.db"
     polymarket_gamma_url: str = "https://gamma-api.polymarket.com"
     kalshi_api_url: str = "https://api.elections.kalshi.com/trade-api/v2"
+    collection_enabled: bool = True
     collection_interval_minutes: int = 5
     min_edge_pct: float = 0.5
     min_certainty_pct: float = 95.0

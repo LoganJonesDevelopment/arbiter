@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, desc, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from arbiter.config import settings
 from arbiter.db import get_session
 from arbiter.models import Event, Market, Opportunity, Snapshot
 
@@ -295,6 +296,8 @@ async def get_market_history(
 
 @router.post("/scan", status_code=202)
 async def trigger_scan():
+    if not settings.collection_enabled:
+        raise HTTPException(status_code=503, detail="Collection is disabled in this environment")
     from arbiter.main import scan_lock, scheduled_scan
 
     if scan_lock.locked():

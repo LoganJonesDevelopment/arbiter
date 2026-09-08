@@ -39,6 +39,8 @@ async def prune_snapshots(session):
 
 
 async def run_scan():
+    if not settings.collection_enabled:
+        raise RuntimeError("Collection is disabled")
     async with async_session() as session:
         poly_collector = PolymarketCollector()
         kalshi_collector = KalshiCollector()
@@ -63,6 +65,8 @@ async def run_scan():
 
 
 async def scheduled_scan():
+    if not settings.collection_enabled:
+        return
     if scan_lock.locked():
         logger.info("Scan already in progress, skipping")
         return
@@ -80,6 +84,10 @@ async def lifespan(app: FastAPI):
     global startup_scan_task
     await init_db()
     logger.info("Database initialized")
+
+    if not settings.collection_enabled:
+        yield
+        return
 
     startup_scan_task = asyncio.create_task(scheduled_scan())
 
