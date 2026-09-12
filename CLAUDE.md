@@ -47,3 +47,6 @@ Runs every N minutes (configurable via `COLLECTION_INTERVAL_MINUTES`):
 4. Match events across exchanges (Jaccard on titles)
 5. Find cross-exchange arbs
 6. Prune snapshots older than 48h
+
+## Conventions
+- Design: see the Design section of AGENTS.md (fleet design system at ~/repos/fleet-ui).
