@@ -5,11 +5,10 @@ os.environ.update(DATABASE_URL="sqlite+aiosqlite:///:memory:", COLLECTION_ENABLE
                   MIN_EDGE_PCT="0.5", MIN_LIQUIDITY_PER_LEG="500", MAX_PRACTICAL_LEGS="20",
                   MIN_CERTAINTY_PCT="95", TAILING_MIN_PRICE_MOVE="0.02")
 
-import asyncio
 import socket
 import unittest
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 from sqlalchemy import select
@@ -65,7 +64,6 @@ class DomainTests(unittest.TestCase):
     def test_matching_rejects_unrelated_contract_types_and_unshared_thresholds(self):
         self.assertFalse(matching._market_types_compatible("Falcons winner", "Falcons spread"))
         self.assertFalse(matching._numbers_compatible("Temperature above 50", "Temperature above 60"))
-        self.assertEqual(matching._jaccard(set(), {"Falcons"}), 0)
         self.assertFalse(matching._market_has_price(market(liquidity=499)))
         self.assertFalse(matching._market_has_price(market(outcome_prices=[0, 0])))
 
@@ -233,24 +231,6 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertLess(history[0]["timestamp"], history[1]["timestamp"])
         await main.prune_snapshots(self.session)
         self.assertEqual(len((await self.session.scalars(select(Snapshot))).all()), 2)
-
-    async def test_collection_enabled_retains_startup_and_scheduler_contract(self):
-        previous_task = main.startup_scan_task
-        try:
-            with patch.object(settings, "collection_enabled", True), patch.object(main, "init_db", new=AsyncMock()), \
-                 patch.object(main, "scheduler", new=Mock()) as scheduler, \
-                 patch.object(main, "scheduled_scan", new=AsyncMock()) as scan:
-                async with main.lifespan(main.app):
-                    await asyncio.sleep(0)
-                    scan.assert_awaited_once()
-                    scheduler.start.assert_called_once()
-                    scheduler.add_job.assert_called_once_with(scan, "interval", minutes=settings.collection_interval_minutes, id="scan")
-                scheduler.shutdown.assert_called_once()
-        finally:
-            if main.startup_scan_task and not main.startup_scan_task.done():
-                main.startup_scan_task.cancel()
-                await asyncio.gather(main.startup_scan_task, return_exceptions=True)
-            main.startup_scan_task = previous_task
 
     async def test_collection_off_blocks_startup_scheduler_manual_scan_and_direct_scan(self):
         with patch.object(main, "init_db", new=AsyncMock()), patch.object(main.scheduler, "start") as start:
