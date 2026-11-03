@@ -142,7 +142,7 @@ const TableRow = memo(function TableRow({
       </td>
 
       <td className="px-2 text-right font-data tabular text-[12px] font-bold" style={{ color: scoreColor(opp.score) }}>
-        {opp.score > 0 ? opp.score.toFixed(1) : '\u2014'}
+        {opp.score > 0 ? opp.score.toFixed(1) : '-'}
       </td>
 
       <td className="px-2 text-right font-data tabular text-[12px]" style={{ color: edgeColor(netEdge) }}>
@@ -150,7 +150,7 @@ const TableRow = memo(function TableRow({
       </td>
 
       <td className="px-2 text-right font-data tabular text-[11px] text-text-secondary">
-        {profit > 0 ? `$${profit.toFixed(2)}` : '\u2014'}
+        {profit > 0 ? `$${profit.toFixed(2)}` : '-'}
       </td>
 
       <td className="px-2 text-right font-data tabular text-[11px]" style={{ color: liquidity < 2000 ? '#d29922' : '#8b949e' }}>
@@ -250,7 +250,7 @@ function edgeColor(edge: number): string {
 }
 
 function formatDaysToRes(days: number | null): string {
-  if (days === null || days === undefined) return '\u2014';
+  if (days === null || days === undefined) return '-';
   if (days < 1) return '<1d';
   if (days < 30) return `${Math.round(days)}d`;
   if (days < 365) return `${Math.round(days / 30)}mo`;

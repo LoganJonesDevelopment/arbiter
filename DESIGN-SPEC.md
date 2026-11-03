@@ -1,4 +1,4 @@
-# Arbiter Design Spec — Trading-Grade Dashboard
+# Arbiter Design Spec: Trading-Grade Dashboard
 
 Desktop-only monitoring tool for one person. Optimize for information density and scannability, not aesthetics. Every pixel should communicate data.
 
@@ -10,7 +10,7 @@ Desktop-only monitoring tool for one person. Optimize for information density an
 
 Three rules borrowed from professional trading UIs:
 
-1. **The interface should get out of the way.** The markets are the content. The UI is the frame. Bloomberg, TradingView, and Deribit all share this — the chrome is minimal and the data fills the viewport.
+1. **The interface should get out of the way.** The markets are the content. The UI is the frame. Bloomberg, TradingView, and Deribit all share this: the chrome is minimal and the data fills the viewport.
 2. **Density over whitespace.** This is not a marketing page. Consumer-app spacing (24px padding, 16px gaps) wastes screen real estate. Trading terminals pack data tight with discipline, not chaos.
 3. **Hierarchy through typography and color, not layout.** Bloomberg doesn't use cards with rounded corners and drop shadows to separate content. It uses font weight, font size, and color to create visual layers on a flat surface.
 
@@ -45,7 +45,7 @@ Rationale: Pure black (#000) is harsh. The slight blue undertone (matching GitHu
 | `border` | `#21262d` | Default borders, dividers |
 | `border-emphasis` | `#30363d` | Hover states, active elements |
 
-Use 1px solid borders only. No box-shadows for elevation — use border color shifts instead. Drop shadows don't work on near-black backgrounds.
+Use 1px solid borders only. No box-shadows for elevation; use border color shifts instead. Drop shadows don't work on near-black backgrounds.
 
 ### Text
 
@@ -68,7 +68,7 @@ Use 1px solid borders only. No box-shadows for elevation — use border color sh
 | `caution-muted` | `#9e6a03` | Caution backgrounds |
 | `accent` | `#6e7681` | Neutral emphasis |
 
-Why these specific values: They're desaturated compared to Tailwind defaults. Bloomberg uses amber (#FFA028) as its primary accent but that's for its black background — on near-black with blue tint, these GitHub-adjacent semantics maintain readability without the "gaming dashboard" feel. The positive green is visible but not radioactive. The red is warm, not alarming.
+Why these specific values: They're desaturated compared to Tailwind defaults. Bloomberg uses amber (#FFA028) as its primary accent but that's for its black background; on near-black with blue tint, these GitHub-adjacent semantics maintain readability without the "gaming dashboard" feel. The positive green is visible but not radioactive. The red is warm, not alarming.
 
 ### Platform Colors
 
@@ -93,9 +93,9 @@ font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, 
 font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', ui-monospace, monospace;
 ```
 
-Inter + JetBrains Mono is the pairing to use. They share nearly identical x-heights, so they sit together naturally. Inter has OpenType tabular figures for inline numbers. JetBrains Mono makes numerical columns scannable because every digit occupies the same width — `$1,111.11` and `$999.99` visually align.
+Inter + JetBrains Mono is the pairing to use. They share nearly identical x-heights, so they sit together naturally. Inter has OpenType tabular figures for inline numbers. JetBrains Mono makes numerical columns scannable because every digit occupies the same width: `$1,111.11` and `$999.99` visually align.
 
-**Do not use a single monospace font for everything.** Monospace hurts readability on titles and descriptions — monospace fonts are wider and slower to read for prose. Use monospace exclusively for data.
+**Do not use a single monospace font for everything.** Monospace hurts readability on titles and descriptions: monospace fonts are wider and slower to read for prose. Use monospace exclusively for data.
 
 ### Type Scale
 
@@ -117,10 +117,10 @@ Key constraint: nothing below 10px. At 10px on a standard density display, reada
 - Always use `tabular-nums` (OpenType feature `tnum`) for any number that appears in a column
 - Right-align all numerical columns
 - Use monospace font for all numbers in data views
-- Currency: `$1,234.56` — always two decimal places, comma thousands separator
-- Percentages: `2.34%` — always two decimal places
-- Prices in cents: `95.1c` — one decimal place
-- Large numbers: `$1.2M`, `$45.3K` — one decimal place with suffix
+- Currency: `$1,234.56` (always two decimal places, comma thousands separator)
+- Percentages: `2.34%` (always two decimal places)
+- Prices in cents: `95.1c` (one decimal place)
+- Large numbers: `$1.2M`, `$45.3K` (one decimal place with suffix)
 - Negative numbers: prefix with minus, color red. Never use parenthetical accounting notation.
 
 ---
@@ -178,7 +178,7 @@ The main view is a dense data table, not cards.
 
 | Column | Width | Align | Font | Content |
 |---|---|---|---|---|
-| Quality indicator | 3px | — | — | Colored vertical bar (no text) |
+| Quality indicator | 3px | - | - | Colored vertical bar (no text) |
 | Type | 48px | left | Inter 10px 600 | `MULTI` `TAIL` `CROSS` pill |
 | Source | 40px | left | Inter 10px 600 | `POLY` `KALSHI` pill |
 | Title | flex (fill) | left | Inter 13px 400 | Event/market title, truncate with ellipsis |
@@ -188,7 +188,7 @@ The main view is a dense data table, not cards.
 | Volume | 64px | right | JetBrains Mono 11px 400 | `$45.3K` |
 | Liquidity | 64px | right | JetBrains Mono 11px 400 | `$12.1K` with warning color if thin |
 | Age | 40px | right | Inter 10px 400 | `2h`, `3d` |
-| Link | 24px | center | — | External link icon |
+| Link | 24px | center | - | External link icon |
 
 ### Row Behavior
 
@@ -199,7 +199,7 @@ The main view is a dense data table, not cards.
 - **Sticky header:** Column headers stay fixed during scroll.
 - **Sorting:** Click column headers to sort. Active sort column shows a small chevron (up/down). Default sort: net edge descending.
 - **Quality bar:** 3px wide vertical bar on the left edge of each row. Colors: green (high), yellow (medium), orange (low), transparent (theoretical).
-- **Non-executable rows:** Reduce opacity to 0.4. Don't hide them — the count matters for context.
+- **Non-executable rows:** Reduce opacity to 0.4. Don't hide them: the count matters for context.
 
 ### Why Tables Beat Cards Here
 
@@ -243,7 +243,7 @@ Single row, 32px height:
 ```
 
 - Type filters: text buttons with count, no background in default state. Active state: subtle bottom border or text color change.
-- Sort dropdown or clickable column headers (prefer column headers — one less control element).
+- Sort dropdown or clickable column headers (prefer column headers: one less control element).
 - Hide theoretical: checkbox + label, right-aligned.
 - Result count: right-aligned, tertiary text.
 
@@ -251,7 +251,7 @@ Single row, 32px height:
 
 ## 8. Detail View (Event Drilldown)
 
-When you click a row, expand inline or slide in a right panel (not a full page navigation — you lose table context).
+When you click a row, expand inline or slide in a right panel (not a full page navigation: you lose table context).
 
 **Preferred: split view.** Table stays on the left (narrowed), detail panel opens on the right. This lets you click through rows without losing your place. TradingView and Deribit both use this pattern. Bloomberg uses it pervasively.
 
@@ -279,7 +279,7 @@ Prediction Market Scanner   POLY 1,247  KALSHI 892  |  423 mkts
 - Subtitle: 10px uppercase tracking-widest, tertiary text.
 - Stats: inline, separated by pipes, tertiary text.
 - Scan indicator: 6px circle, green when recent (<10m), yellow when stale (10-30m), red when old (>30m). Subtle pulse animation on green only.
-- Scan button: ghost button (border only), accent color. No fill — it's a secondary action.
+- Scan button: ghost button (border only), accent color. No fill: it's a secondary action.
 
 ---
 
@@ -307,7 +307,7 @@ Prediction Market Scanner   POLY 1,247  KALSHI 892  |  423 mkts
 - Type filters are additive toggles (click MULTI to show only multi-outcome)
 - Quality filters are additive toggles
 - Both can be active simultaneously (intersection)
-- Show result count: `23/68` — tells you how much is filtered
+- Show result count: `23/68` (tells you how much is filtered)
 
 ---
 
@@ -318,7 +318,7 @@ This is desktop-only, but handle different desktop widths:
 - **< 1200px:** Hide lowest-priority columns (Age, Raw Edge). Narrow padding.
 - **1200-1920px:** Full table, standard spacing.
 - **> 1920px:** Consider two-column layout (table left, detail right permanent).
-- **Ultrawide (3440px+):** Three columns — secondary data table or chart alongside.
+- **Ultrawide (3440px+):** Three columns: secondary data table or chart alongside.
 
 ---
 
@@ -326,7 +326,7 @@ This is desktop-only, but handle different desktop widths:
 
 - Table must render 200+ rows without jank. Use virtualized scrolling (react-window or similar) if row count exceeds 100.
 - Data refreshes every 30 seconds. Updates should be in-place (no full re-render flicker). Use stable keys and memoized rows.
-- No loading spinners for data refresh — just update the "refresh Xs ago" indicator. Only show a loading state on initial page load.
+- No loading spinners for data refresh: just update the "refresh Xs ago" indicator. Only show a loading state on initial page load.
 - Animations: limit to opacity transitions (150ms) on hover states. No transforms, no layout shifts.
 
 ---
@@ -378,20 +378,20 @@ What to steal from each reference:
 
 ## Sources
 
-- [Pencil & Paper — Data Table UX Patterns](https://www.pencilandpaper.io/articles/ux-pattern-analysis-enterprise-data-tables)
-- [Pencil & Paper — Dashboard UX Patterns](https://www.pencilandpaper.io/articles/ux-pattern-analysis-data-dashboards)
-- [Bloomberg — Designing the Terminal for Color Accessibility](https://www.bloomberg.com/company/stories/designing-the-terminal-for-color-accessibility/)
+- [Pencil & Paper: Data Table UX Patterns](https://www.pencilandpaper.io/articles/ux-pattern-analysis-enterprise-data-tables)
+- [Pencil & Paper: Dashboard UX Patterns](https://www.pencilandpaper.io/articles/ux-pattern-analysis-data-dashboards)
+- [Bloomberg: Designing the Terminal for Color Accessibility](https://www.bloomberg.com/company/stories/designing-the-terminal-for-color-accessibility/)
 - [Bloomberg Color Palette](https://www.color-hex.com/color-palette/111776)
-- [Devexperts — UX/UI Design for Online Trading Platforms](https://devexperts.com/blog/ux-ui-design-for-online-trading-platforms/)
-- [Devexperts — Trading Platform Design No-Nos](https://devexperts.com/blog/trading-platform-ux-ui-design-no-nos/)
-- [Human Invariant — Novel Interface Designs for Prediction Markets](https://humaninvariant.substack.com/p/novel-interface-designs-for-prediction)
-- [Paul Wallas — Designing for Data Density](https://paulwallas.medium.com/designing-for-data-density-what-most-ui-tutorials-wont-teach-you-091b3e9b51f4)
+- [Devexperts: UX/UI Design for Online Trading Platforms](https://devexperts.com/blog/ux-ui-design-for-online-trading-platforms/)
+- [Devexperts: Trading Platform Design No-Nos](https://devexperts.com/blog/trading-platform-ux-ui-design-no-nos/)
+- [Human Invariant: Novel Interface Designs for Prediction Markets](https://humaninvariant.substack.com/p/novel-interface-designs-for-prediction)
+- [Paul Wallas: Designing for Data Density](https://paulwallas.medium.com/designing-for-data-density-what-most-ui-tutorials-wont-teach-you-091b3e9b51f4)
 - [TradingView Custom Themes API](https://www.tradingview.com/charting-library-docs/latest/customization/styles/custom-themes/)
-- [Four Zero Three — Scalable Accessible Dark Theme](https://www.fourzerothree.in/p/scalable-accessible-dark-mode)
-- [AG Grid — Theming Compactness](https://www.ag-grid.com/javascript-data-grid/theming-compactness/)
-- [MUI X DataGrid — Row Height](https://mui.com/x/react-data-grid/row-height/)
+- [Four Zero Three: Scalable Accessible Dark Theme](https://www.fourzerothree.in/p/scalable-accessible-dark-mode)
+- [AG Grid: Theming Compactness](https://www.ag-grid.com/javascript-data-grid/theming-compactness/)
+- [MUI X DataGrid: Row Height](https://mui.com/x/react-data-grid/row-height/)
 - [Inter Typeface](https://rsms.me/inter/)
 - [JetBrains Mono](https://www.jetbrains.com/lp/mono/)
-- [Mobbin — Binance Brand Colors](https://mobbin.com/colors/brand/binance)
-- [DesignRush — Dashboard Design Principles](https://www.designrush.com/agency/ui-ux-design/dashboard/trends/dashboard-design-principles)
-- [UXPin — Dashboard Design Principles](https://www.uxpin.com/studio/blog/dashboard-design-principles/)
+- [Mobbin: Binance Brand Colors](https://mobbin.com/colors/brand/binance)
+- [DesignRush: Dashboard Design Principles](https://www.designrush.com/agency/ui-ux-design/dashboard/trends/dashboard-design-principles)
+- [UXPin: Dashboard Design Principles](https://www.uxpin.com/studio/blog/dashboard-design-principles/)

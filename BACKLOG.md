@@ -1,6 +1,6 @@
-# Backlog — Arbiter
+# Backlog: Arbiter
 
-Idea inbox for this repo. Dump anything under **Inbox** — via `/log arbiter: idea` or by hand. `/code` reads it to pitch next work. Newest first.
+Idea inbox for this repo. Dump anything under **Inbox**, via `/log arbiter: idea` or by hand. `/code` reads it to pitch next work. Newest first.
 
 ## Inbox
 

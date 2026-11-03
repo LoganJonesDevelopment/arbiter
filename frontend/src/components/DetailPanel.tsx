@@ -101,7 +101,7 @@ function CrossPanel({ d }: { d: CrossExchangeDetails }) {
       <SectionLabel>Position sizing</SectionLabel>
       <div className="grid grid-cols-2 gap-2 mb-4 text-[11px]">
         <StatBox label="Min liquidity" value={`$${fmtNum(minLiq)}`} sub="Limits position size" />
-        <StatBox label="Max shares (est)" value={maxShares > 0 ? fmtNum(maxShares) : '—'} sub={maxShares > 0 ? `$${fmtNum(maxShares * d.total_cost)} deployed` : 'Low liquidity'} />
+        <StatBox label="Max shares (est)" value={maxShares > 0 ? fmtNum(maxShares) : '-'} sub={maxShares > 0 ? `$${fmtNum(maxShares * d.total_cost)} deployed` : 'Low liquidity'} />
         <StatBox label="Poly volume" value={`$${fmtNum(d.poly_volume)}`} />
         <StatBox label="Kalshi volume" value={`$${fmtNum(d.kalshi_volume)}`} />
       </div>
@@ -129,7 +129,7 @@ function CrossPanel({ d }: { d: CrossExchangeDetails }) {
         </div>
         {d.match_confidence < 0.8 && (
           <div className="text-caution text-[10px] font-semibold">
-            LOW MATCH CONFIDENCE — verify these are the same underlying event before trading
+            LOW MATCH CONFIDENCE: verify these are the same underlying event before trading
           </div>
         )}
       </div>
@@ -210,10 +210,10 @@ function MultiPanel({ d }: { d: MultiOutcomeDetails }) {
       <SectionLabel>Risks</SectionLabel>
       <div className="space-y-1 mb-4 text-[11px] text-text-secondary">
         {!d.is_complete && (
-          <Risk level="high">{d.inactive_markets} market{d.inactive_markets > 1 ? 's are' : ' is'} unlisted — payout NOT guaranteed if an unlisted outcome wins</Risk>
+          <Risk level="high">{d.inactive_markets} market{d.inactive_markets > 1 ? 's are' : ' is'} unlisted: payout NOT guaranteed if an unlisted outcome wins</Risk>
         )}
         {d.has_thin_leg && (
-          <Risk level="medium">At least one leg has thin liquidity — may not fill at displayed price</Risk>
+          <Risk level="medium">At least one leg has thin liquidity, may not fill at displayed price</Risk>
         )}
         <Risk level="info">Min liquidity across legs: ${fmtNum(d.min_liquidity)}</Risk>
       </div>
@@ -275,7 +275,7 @@ function TailingPanel({ d }: { d: TailingDetails }) {
         <StatBox label="Momentum" value={d.momentum.toUpperCase()} />
         <StatBox label="Price move" value={`${d.price_move > 0 ? '+' : ''}${(d.price_move * 100).toFixed(1)}c`} />
         <StatBox label="Volume" value={`$${fmtNum(d.volume)}`} />
-        <StatBox label="Liquidity" value={`$${fmtNum(d.liquidity)}`} sub={d.liquidity < 2000 ? 'Low — may slip' : undefined} />
+        <StatBox label="Liquidity" value={`$${fmtNum(d.liquidity)}`} sub={d.liquidity < 2000 ? 'Low, may slip' : undefined} />
       </div>
     </>
   );
